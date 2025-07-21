@@ -10,12 +10,30 @@ class LandingScreen extends StatelessWidget {
         title: const Text('Welcome to CRM Platform'),
       ),
       body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-  Navigator.pushNamed(context, '/onboarding');
-},
-
-          child: const Text('Get Started'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/login');
+              },
+              child: const Text('Login'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/onboarding');
+              },
+              child: const Text('Register'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/onboarding');
+              },
+              child: const Text('Get Started'),
+            ),
+          ],
         ),
       ),
     );

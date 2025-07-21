@@ -13,15 +13,20 @@ def save_onboarding(
     data: schemas.OnboardingSchema,
     db: Session = Depends(get_db)
 ):
-    org = models.Organization(
-        company_name=data.company_name,
-        company_size=data.company_size,
-        crm_type=data.crm_type
-    )
-    db.add(org)
+    company = models.Company(
+    company_name=data.company_name,
+    company_size=data.company_size,
+    industry="Default Industry",
+    location="Default Location",
+    crm_type=data.crm_type.lower().replace(" ", "_")
+)
+
+    db.add(company)
     db.commit()
-    db.refresh(org)
+    db.refresh(company)
     return {
-        "message": "Onboarding data saved",
-        "organization_id": org.id
+        "message": "Company created successfully",
+        "company_id": company.id,
+        "crm_type": company.crm_type
     }
+

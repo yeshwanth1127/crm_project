@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import 'registration_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -18,19 +20,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<String> crmTypes = ['Sales CRM', 'Marketing CRM', 'Support CRM'];
 
   Future<void> submitOnboarding() async {
+    if (!isFormComplete) return;
     setState(() => isLoading = true);
-    final success = await ApiService().submitOnboarding(
-      companySize!,
-      crmType!,
-      companyNameController.text.trim(),
-    );
-    setState(() => isLoading = false);
 
-    if (success) {
-      Navigator.pushNamed(context, '/register');
-    } else {
+    try {
+      final response = await ApiService().submitOnboarding(
+        companySize!,
+        crmType!,
+        companyNameController.text.trim(),
+      ).timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+      setState(() => isLoading = false);
+
+      if (response != null && response['company_id'] != null) {
+        final prefs = await SharedPreferences.getInstance();
+        prefs.setInt('company_id', response['company_id']);
+        prefs.setString('crm_type', response['crm_type']);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Company registered successfully!")),
+        );
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const RegistrationScreen()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to submit. Please try again.")),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to submit. Please try again.")),
+        SnackBar(content: Text("Network error: $e")),
       );
     }
   }
