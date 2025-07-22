@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'registration_screen.dart';
+import 'dart:ui';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -11,13 +12,19 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
+  final TextEditingController companyNameController = TextEditingController();
   String? companySize;
   String? crmType;
   bool isLoading = false;
-  final TextEditingController companyNameController = TextEditingController();
 
   final List<String> companySizes = ['1-5', '6-25', '26-100+'];
   final List<String> crmTypes = ['Sales CRM', 'Marketing CRM', 'Support CRM'];
+
+  bool get isFormComplete =>
+      companyNameController.text.trim().isNotEmpty &&
+      companySize != null &&
+      crmType != null &&
+      !isLoading;
 
   Future<void> submitOnboarding() async {
     if (!isFormComplete) return;
@@ -35,14 +42,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       if (response != null && response['company_id'] != null) {
         final prefs = await SharedPreferences.getInstance();
-        prefs.setInt('company_id', response['company_id']);
-        prefs.setString('crm_type', response['crm_type']);
+        await prefs.setInt('company_id', response['company_id']);
+        await prefs.setString('crm_type', response['crm_type']);
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Company registered successfully!")),
         );
 
-        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const RegistrationScreen()),
@@ -61,62 +68,146 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  bool get isFormComplete =>
-      companySize != null &&
-      crmType != null &&
-      companyNameController.text.trim().isNotEmpty &&
-      !isLoading;
-
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Onboarding')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Company Name', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: companyNameController,
-              decoration: const InputDecoration(
-                hintText: 'Enter your company name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 30),
-            const Text('How many people will use the CRM?', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 12),
-            DropdownButton<String>(
-              isExpanded: true,
-              value: companySize,
-              hint: const Text('Select Company Size'),
-              items: companySizes.map((size) => DropdownMenuItem(value: size, child: Text(size))).toList(),
-              onChanged: (value) => setState(() => companySize = value),
-            ),
-            const SizedBox(height: 30),
-            const Text('What type of CRM do you need?', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 12),
-            DropdownButton<String>(
-              isExpanded: true,
-              value: crmType,
-              hint: const Text('Select CRM Type'),
-              items: crmTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-              onChanged: (value) => setState(() => crmType = value),
-            ),
-            const SizedBox(height: 50),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isFormComplete ? submitOnboarding : null,
-                child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Proceed'),
-              ),
-            ),
-          ],
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Container(
+              width: screenWidth > 500 ? 450 : screenWidth * 0.85,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 25,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Onboarding',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+
+                        _buildLabel('Company Name'),
+                        _buildTextField(companyNameController, 'Enter your company name'),
+                        const SizedBox(height: 30),
+
+                        _buildLabel('How many people will use the CRM?'),
+                        _buildDropdown(companySizes, companySize, (val) => setState(() => companySize = val)),
+                        const SizedBox(height: 30),
+
+                        _buildLabel('What type of CRM do you need?'),
+                        _buildDropdown(crmTypes, crmType, (val) => setState(() => crmType = val)),
+                        const SizedBox(height: 40),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: isFormComplete ? submitOnboarding : null,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: Colors.pinkAccent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: isLoading
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text('Proceed', style: TextStyle(fontSize: 18)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(text, style: const TextStyle(fontSize: 18, color: Colors.white)),
+      );
+
+  Widget _buildTextField(TextEditingController controller, String hint) => TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white70),
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.1),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white54),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white54),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white),
+          ),
+        ),
+        style: const TextStyle(color: Colors.white),
+      );
+
+  Widget _buildDropdown(List<String> items, String? value, Function(String?) onChanged) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white54),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButton<String>(
+        isExpanded: true,
+        dropdownColor: Colors.black.withOpacity(0.8),
+        value: value,
+        underline: const SizedBox(),
+        iconEnabledColor: Colors.white,
+        hint: const Text('Select', style: TextStyle(color: Colors.white70)),
+        style: const TextStyle(color: Colors.white),
+        items: items.map((opt) =>
+          DropdownMenuItem(value: opt, child: Text(opt))).toList(),
+        onChanged: onChanged,
       ),
     );
   }

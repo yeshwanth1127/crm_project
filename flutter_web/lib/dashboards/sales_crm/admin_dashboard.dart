@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_web/services/api_service.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SalesAdminDashboard extends StatefulWidget {
   final int companyId;
@@ -209,9 +210,21 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> {
           child: const Text("Manage Features"),
         ),
         ElevatedButton(
-          onPressed: () => Navigator.pushNamed(context, "/logout"),
-          child: const Text("Logout"),
-        ),
+  onPressed: () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();  // clear session data
+
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/',
+        (route) => false, // removes all previous routes
+      );
+    }
+  },
+  child: const Text("Logout"),
+),
+
       ],
     );
   }

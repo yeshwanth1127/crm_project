@@ -52,9 +52,7 @@ class _SplashDeciderState extends State<SplashDecider> {
     String? role = prefs.getString('role');
     String? crmType = prefs.getString('crm_type');
     String? email = prefs.getString('email');
-    String? companyIdString = prefs.getString('company_id');
-    int? companyId = companyIdString != null ? int.tryParse(companyIdString) : null;
-
+    int? companyId = prefs.getInt('company_id');
 
 
     if (role != null && crmType != null && email != null) {
