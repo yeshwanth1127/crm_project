@@ -4,6 +4,14 @@ from .routes import sales_crm
 from .database import Base, engine
 from .routes import onboarding, register
 from .routes import login
+import os
+from dotenv import load_dotenv
+
+
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+load_dotenv(dotenv_path)
+print("✅ SECRET_KEY loaded in main.py:", os.getenv("SECRET_KEY"))
+
 
 app = FastAPI()
 
