@@ -27,6 +27,11 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(String, default="admin")
     company_id = Column(Integer, ForeignKey("companies.id"))
+    assigned_team_leader = Column(Integer, ForeignKey('users.id'), nullable=True)
+    account_status = Column(String, default='Active', nullable=True)
+    reward_points = Column(Integer, default=0, nullable=True)
+
+
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -35,16 +40,16 @@ class Customer(Base):
     name = Column(String, nullable=False)
     company_name = Column(String, nullable=False)
     contact_number = Column(String, nullable=False)
-    email = Column(String, nullable=True)  # optional
-    
-    pipeline_stage = Column(String, nullable=False)  # e.g., lead, qualified, proposal, won, lost
-    lead_status = Column(String, nullable=False)  # lead or client
-    
+    email = Column(String, nullable=True)
+    pipeline_stage = Column(String, nullable=False)
+    lead_status = Column(String, nullable=False)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=False)
     notes = Column(Text, nullable=True)
-
+    account_status = Column(String, default='Active', nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)  # ✅ New field
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 
 class FeatureCatalog(Base):
     __tablename__ = "features_catalog"

@@ -119,12 +119,12 @@ int _getPageIndex(String route) {
  List<Widget> _navButtons(BuildContext context) {
   final pages = [
     {'title': 'Dashboard Overview', 'route': '/dashboard-overview'},
+    {'title': 'User Management', 'route': '/user-management'} ,
     {'title': 'Customers', 'route': '/customers'},
     {'title': 'Interactions', 'route': '/interactions'},
     {'title': 'Tasks', 'route': '/tasks'},
     {'title': 'Follow-ups', 'route': '/followups'},
     {'title': 'Pipeline Analytics', 'route': '/pipeline-analytics'},
-    {'title': 'User Management', 'route': '/user-management'},
     {'title': 'Feature Settings', 'route': '/feature-settings'},
     {'title': 'Company Settings', 'route': '/company-settings'},
   ];
