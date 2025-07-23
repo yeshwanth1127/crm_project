@@ -4,6 +4,8 @@ import 'package:flutter_web/services/api_service.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_web/sales_crm/customers/customers_home.dart';
+
 
 class SalesAdminDashboard extends StatefulWidget {
   final int companyId;
@@ -85,7 +87,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> {
                 index: _getPageIndex(selectedPage),
                 children: [
                   _buildDashboardOverview(),
-                  Center(child: Text("Customers Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+                  CustomersHome(companyId: widget.companyId),
                   Center(child: Text("Interactions Page", style: TextStyle(color: Colors.white, fontSize: 20))),
                   Center(child: Text("Tasks Page", style: TextStyle(color: Colors.white, fontSize: 20))),
                   Center(child: Text("Follow-ups Page", style: TextStyle(color: Colors.white, fontSize: 20))),

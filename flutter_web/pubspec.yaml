@@ -36,6 +36,7 @@ dependencies:
   pull_to_refresh: ^2.0.0
   lottie: ^3.1.0
   dio: ^5.8.0+1
+  intl: ^0.20.2
 
 
 

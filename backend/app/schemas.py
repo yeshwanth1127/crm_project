@@ -1,6 +1,6 @@
 from dataclasses import Field
 from datetime import datetime
-from typing import Optional, Dict
+from typing import List, Optional, Dict
 from pydantic import BaseModel, EmailStr, Field, constr
 from typing import Literal
 
@@ -46,17 +46,23 @@ class UserResponseSchema(BaseModel):
 # ===================== ✅ CUSTOMER SCHEMAS =====================
 
 class CustomerBase(BaseModel):
-    name: str
-    company_name: str
-    contact_number: str
-    pipeline_stage: str
-    lead_status: str
-    assigned_to: int
-    notes: Optional[str] = None
+    first_name: str
+    last_name: str
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    lifecycle_stage: Optional[str] = None
+    status: Optional[str] = None
+    assigned_to: int
+    company_id: int
+
+class CustomerCustomValueInput(BaseModel):
+    field_id: int
+    value: Optional[str]
 
 class CustomerCreate(CustomerBase):
-    pass
+    custom_values: Optional[List[CustomerCustomValueInput]] = []
+
+
 
 class CustomerResponse(CustomerBase):
     id: int
@@ -150,6 +156,59 @@ class AuditLogOut(BaseModel):
     after_data: Optional[Dict]
     ip_address: Optional[str]
     device_info: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+class CustomFieldSchema(BaseModel):
+    id: int
+    company_id: int
+    field_name: str
+    field_type: str
+    is_required: bool
+
+    class Config:
+        orm_mode = True
+
+
+class CustomFieldCreateSchema(BaseModel):
+    company_id: int
+    field_name: str
+    field_type: str
+    is_required: bool = False
+
+
+class CustomValueCreateSchema(BaseModel):
+    customer_id: int
+    field_id: int
+    value: Optional[str] = None
+
+class LifecycleConfigCreate(BaseModel):
+    company_id: int
+    stage: str
+    statuses: list[str]
+
+class LifecycleConfigResponse(BaseModel):
+    id: int
+    company_id: int
+    stage: str
+    statuses: list[str]
+
+    class Config:
+        orm_mode = True
+
+class ConversationCreate(BaseModel):
+    customer_id: int
+    channel: str
+    direction: str
+    message: str
+    is_read: Optional[bool] = False
+    attachment_url: Optional[str] = None
+    created_by: Optional[int] = None
+
+class ConversationResponse(ConversationCreate):
+    id: int
+    timestamp: datetime
 
     class Config:
         orm_mode = True

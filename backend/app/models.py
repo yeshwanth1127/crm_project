@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, JSON
 from sqlalchemy.sql import func
 from .database import Base
+from sqlalchemy.orm import relationship
 
 from datetime import datetime
 
@@ -30,25 +31,27 @@ class User(Base):
     assigned_team_leader = Column(Integer, ForeignKey('users.id'), nullable=True)
     account_status = Column(String, default='Active', nullable=True)
     reward_points = Column(Integer, default=0, nullable=True)
-
+    company = relationship("Company")
 
 
 class Customer(Base):
     __tablename__ = "customers"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    company_name = Column(String, nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+    company_name = Column(String, nullable=False)  # Extract from admin
     contact_number = Column(String, nullable=False)
     email = Column(String, nullable=True)
-    pipeline_stage = Column(String, nullable=False)
-    lead_status = Column(String, nullable=False)
+    pipeline_stage = Column(String, nullable=True)
+    lead_status = Column(String, nullable=True)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=False)
     notes = Column(Text, nullable=True)
     account_status = Column(String, default='Active', nullable=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)  # ✅ New field
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 
 
 class FeatureCatalog(Base):
@@ -158,3 +161,48 @@ class AuditLog(Base):
 
     ip_address = Column(String, nullable=True)
     device_info = Column(String, nullable=True)
+
+class CustomerCustomField(Base):
+    __tablename__ = "customer_custom_fields"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    field_name = Column(String, nullable=False)
+    field_type = Column(String, nullable=False)  # text, number, date, dropdown, etc.
+    is_required = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomerCustomValue(Base):
+    __tablename__ = "customer_custom_values"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    field_id = Column(Integer, ForeignKey("customer_custom_fields.id"), nullable=False)
+    value = Column(String, nullable=True)
+
+class CustomerLifecycleConfig(Base):
+    __tablename__ = "customer_lifecycle_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    stage = Column(String, nullable=False)        # e.g., Lead, Prospect, Customer
+    statuses = Column(JSON, nullable=False)       # e.g., ["Warm", "Hot", "Lost"]
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+
+    channel = Column(String, nullable=False)        # email, sms, call, etc.
+    direction = Column(String, nullable=False)      # inbound, outbound
+    message = Column(Text, nullable=False)
+
+    is_read = Column(Boolean, default=False)        # ✅ NEW: read/unread toggle
+    attachment_url = Column(String, nullable=True)  # ✅ NEW: optional file
+
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)

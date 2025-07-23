@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String password = '';
   bool isLoading = false;
 
-  final String backendUrl = 'http://192.168.0.137:8000/api/login';
+  final String backendUrl = 'http://192.168.0.14:8000/api/login';
 
   Future<void> login() async {
   if (!_formKey.currentState!.validate()) return;
@@ -42,40 +42,48 @@ class _LoginScreenState extends State<LoginScreen> {
 
   try {
     final response = await http.post(
-  Uri.parse(backendUrl),
-  headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-  body: {
-    "email": email,
-    "password": password,
-  },
-);
-;
-
+      Uri.parse(backendUrl),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        "email": email,
+        "password": password,
+      },
+    );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final crmType = data['crm_type'];
-      final role = data['role'];
-      final companyId = data['company_id'];
-      final userEmail = data['email'];
+  final data = jsonDecode(response.body);
 
-      final prefs = await SharedPreferences.getInstance();
-      prefs.setString('crm_type', crmType);
-      prefs.setString('role', role);
-      prefs.setInt('company_id', companyId);
-      prefs.setString('email', userEmail);
+  final token = data['token'] ?? '';
+  final crmType = data['crm_type'] ?? '';
+  final role = data['role'] ?? '';
+  final companyId = data['company_id'];
+  final userEmail = data['email'] ?? '';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login Successful!')),
-      );
+  final prefs = await SharedPreferences.getInstance();
 
-      navigateToDashboard(crmType, role, userEmail, companyId);
-    } else {
-      final error = jsonDecode(response.body);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error['detail'] ?? 'Invalid login')),
-      );
-    }
+  // ✅ Store all session-related values
+  await prefs.setString('token', token);
+  await prefs.setString('crm_type', crmType);
+  await prefs.setString('role', role);
+  await prefs.setInt('company_id', companyId);
+  await prefs.setString('email', userEmail);
+
+  print('🔐 Token stored: $token'); // Optional debug
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Login Successful!')),
+  );
+
+  navigateToDashboard(crmType, role, userEmail, companyId);
+} else {
+  final error = jsonDecode(response.body);
+  final errorMsg = error['detail'] ?? 'Invalid login';
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(errorMsg)),
+  );
+}
+
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Error: $e')),
@@ -84,6 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (mounted) setState(() => isLoading = false);
   }
 }
+
 
 
  void navigateToDashboard(String crmType, String role, String email, int companyId) {

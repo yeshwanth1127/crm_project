@@ -7,8 +7,8 @@ import 'package:http/http.dart' as http;
 /// For physical device → 'http://<your_local_ip>:8000'
 
 class ApiService {
-  static const String salesBaseUrl = 'http://192.168.0.137:8000/api/sales';
-  static const String baseUrl = 'http://192.168.0.137:8000/api/onboarding';
+  static const String salesBaseUrl = 'http://192.168.0.14:8000/api/sales';
+  static const String baseUrl = 'http://192.168.0.14:8000/api/onboarding';
 
   Future<Map<String, dynamic>?> submitOnboarding(String companySize, String crmType, String companyName) async {
     try {
@@ -38,7 +38,7 @@ class ApiService {
   }
   static Future<Map<String, dynamic>> fetchDashboardStats(int companyId, String range) async {
     final response = await http.get(
-  Uri.parse('http://192.168.0.137:8000/api/sales/analytics/overview/?company_id=$companyId&range=$range')
+  Uri.parse('http://192.168.0.14:8000/api/sales/analytics/overview/?company_id=$companyId&range=$range')
 );
     if (response.statusCode != 200) throw Exception('Failed to load dashboard stats');
     return json.decode(response.body);
@@ -46,7 +46,7 @@ class ApiService {
 
   static Future<List<String>> fetchSelectedFeatures(int companyId) async {
 final response = await http.get(
-  Uri.parse('http://192.168.0.137:8000/api/sales/get-features?company_id=$companyId')
+  Uri.parse('http://192.168.0.14:8000/api/sales/get-features?company_id=$companyId')
 );
     if (response.statusCode != 200) throw Exception('Failed to load features');
     final data = json.decode(response.body);

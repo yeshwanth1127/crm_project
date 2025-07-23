@@ -4,15 +4,18 @@ from datetime import datetime
 from typing import List, Optional
 import json
 from sqlalchemy import func
-from ..utils.audit_logger import log_audit
+from ..utils.audit_logger import log_audit, serialize_model
 from ..auth import get_current_user
-
+from ..models import CustomerCustomField, CustomerCustomValue
+from ..schemas import CustomFieldCreateSchema, CustomFieldSchema, CustomValueCreateSchema, CustomerCustomValueInput
 from ..database import get_db
 from ..models import Company, Customer, Interaction, Task, FollowUp, User, AuditLog
 from ..schemas import UserCreateSchema, UserResponseSchema
-
+from ..models import CustomerLifecycleConfig
+from ..schemas import LifecycleConfigCreate, LifecycleConfigResponse
 from backend.app import schemas
-
+from ..models import Conversation
+from ..schemas import ConversationCreate, ConversationResponse
 from backend.app import models
 
 router = APIRouter(prefix="/api/sales", tags=["Sales CRM Admin"])
@@ -21,36 +24,60 @@ router = APIRouter(prefix="/api/sales", tags=["Sales CRM Admin"])
 
 @router.post("/customers/")
 def create_customer(
-    name: str = Form(...),
-    company_name: str = Form(...),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
     contact_number: str = Form(...),
-    pipeline_stage: str = Form(...),
-    lead_status: str = Form(...),
+    email: Optional[str] = Form(None),
+    pipeline_stage: Optional[str] = Form(None),
+    lead_status: Optional[str] = Form(None),
     assigned_to: int = Form(...),
     company_id: int = Form(...),
-    notes: str = Form(None),
-    email: str = Form(None),
+    custom_values: Optional[str] = Form(None),  # JSON string from frontend
     db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
+    # ✅ Safely extract company name from admin
+    company_name = user.company.company_name if user.company else "Unknown"
+
+    # ✅ Create the main customer record
     customer = Customer(
-        name=name,
+        first_name=first_name,
+        last_name=last_name,
         company_name=company_name,
         contact_number=contact_number,
+        email=email,
         pipeline_stage=pipeline_stage,
         lead_status=lead_status,
         assigned_to=assigned_to,
         company_id=company_id,
-        notes=notes,
-        email=email
     )
 
     db.add(customer)
     db.commit()
     db.refresh(customer)
 
-    log_audit(db, user.id, user.company_id, user.role, "Created Customer",
-              "customer", customer.id, None, customer.__dict__)
+    # ✅ Handle optional custom fields
+    if custom_values:
+        try:
+            parsed_values = json.loads(custom_values)
+            for val in parsed_values:
+                validated = CustomerCustomValueInput(**val)
+                db.add(CustomerCustomValue(
+                    customer_id=customer.id,
+                    field_id=validated.field_id,
+                    value=validated.value
+                ))
+            db.commit()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid custom_values: {str(e)}")
+
+    # ✅ Audit log
+    log_audit(
+    db, user.id, user.company_id, user.role,
+    "Created Customer", "customer", customer.id,
+    None, customer  # ✅ Pass model directly; handled by log_audit
+)
+
 
     return {"message": "Customer created", "customer_id": customer.id}
 
@@ -68,14 +95,51 @@ def filter_customers_by_status(company_id: int, status: str, db: Session = Depen
 
 @router.get("/customers/")
 def list_customers(company_id: int, db: Session = Depends(get_db)):
-    return db.query(Customer).filter(Customer.company_id == company_id).all()
+    customers = db.query(Customer).filter(Customer.company_id == company_id).all()
+    result = []
+
+    for customer in customers:
+        # Fetch custom field values for each customer
+        custom_values = db.query(CustomerCustomValue, CustomerCustomField)\
+            .join(CustomerCustomField, CustomerCustomValue.field_id == CustomerCustomField.id)\
+            .filter(CustomerCustomValue.customer_id == customer.id).all()
+
+        custom_fields = {
+            field.field_name: value.value
+            for value, field in custom_values
+        }
+
+        customer_data = customer.__dict__.copy()
+        customer_data["custom_fields"] = custom_fields
+        result.append(customer_data)
+
+    return result
 
 @router.get("/customers/{customer_id}")
 def get_customer(customer_id: int, db: Session = Depends(get_db)):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    return customer
+
+    # Fetch custom field values
+    custom_values = db.query(CustomerCustomValue, CustomerCustomField)\
+        .join(CustomerCustomField, CustomerCustomValue.field_id == CustomerCustomField.id)\
+        .filter(CustomerCustomValue.customer_id == customer_id).all()
+
+    custom_fields = [
+        {
+            "field_name": field.field_name,
+            "value": value.value,
+            "field_type": field.field_type
+        }
+        for value, field in custom_values
+    ]
+
+    customer_data = customer.__dict__.copy()
+    customer_data["custom_fields"] = custom_fields
+
+    return customer_data
+
 
 
 
@@ -95,14 +159,15 @@ def update_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    before = customer.__dict__.copy()
+    before = serialize_model(customer)
+
     for field, value in data.items():
         setattr(customer, field, value)
     db.commit()
     db.refresh(customer)
 
     log_audit(db, user.id, user.company_id, user.role, "Updated Customer", 
-              "customer", customer.id, before, customer.__dict__)
+              "customer", customer.id, before, customer)
 
     return {"message": "Customer updated"}
 
@@ -117,7 +182,8 @@ def delete_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    before = customer.__dict__.copy()
+    before = serialize_model(customer)
+
     db.delete(customer)
     db.commit()
 
@@ -644,3 +710,142 @@ def create_audit_log(log: schemas.AuditLogCreate, user_id: int, company_id: int,
     db.commit()
     db.refresh(new_log)
     return {"message": "Audit log created successfully"}
+
+# ➕ Create a new custom field
+@router.post("/custom-fields/", response_model=CustomFieldSchema)
+def create_custom_field(field: CustomFieldCreateSchema, db: Session = Depends(get_db), user = Depends(get_current_user)):
+    new_field = CustomerCustomField(**field.dict())
+    db.add(new_field)
+    db.commit()
+    db.refresh(new_field)
+    return new_field
+
+# 📥 Get all custom fields for a company
+@router.get("/custom-fields/")
+def get_custom_fields(company_id: int, db: Session = Depends(get_db)):
+    fields = db.query(CustomerCustomField).filter(CustomerCustomField.company_id == company_id).all()
+    return [
+        {
+            "id": field.id,
+            "field_name": field.field_name,
+            "field_type": field.field_type,
+            "is_required": field.is_required
+        }
+        for field in fields
+    ]
+
+# 💾 Save custom values for a specific customer
+@router.post("/custom-values/")
+def save_custom_values(
+    data: List[CustomValueCreateSchema],
+    db: Session = Depends(get_db)
+):
+    try:
+        for item in data:
+            value = CustomerCustomValue(
+                customer_id=item.customer_id,
+                field_id=item.field_id,
+                value=item.value
+            )
+            db.add(value)
+        db.commit()
+        return {"message": "Custom values saved successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error saving custom values: {str(e)}")
+# 📤 Get all custom values for a specific customer
+
+@router.get("/custom-values/{customer_id}")
+def get_custom_values(customer_id: int, db: Session = Depends(get_db)):
+    values = db.query(CustomerCustomValue).filter(CustomerCustomValue.customer_id == customer_id).all()
+    return [{"field_id": v.field_id, "value": v.value} for v in values]
+
+@router.get("/customers/check-duplicate")
+def check_duplicate_customer(
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    company_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Customer).filter(Customer.company_id == company_id)
+
+    if email:
+        query = query.filter(Customer.email == email)
+    if phone:
+        query = query.filter(Customer.contact_number == phone)
+
+    duplicate_exists = db.query(query.exists()).scalar()
+    return {"duplicate": duplicate_exists}
+
+@router.post("/lifecycle-config/", response_model=LifecycleConfigResponse)
+def create_lifecycle_config(
+    config: LifecycleConfigCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    entry = CustomerLifecycleConfig(**config.dict())
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+@router.get("/lifecycle-config/", response_model=List[LifecycleConfigResponse])
+def get_lifecycle_configs(company_id: int, db: Session = Depends(get_db)):
+    return db.query(CustomerLifecycleConfig)\
+             .filter(CustomerLifecycleConfig.company_id == company_id).all()
+
+@router.put("/lifecycle-config/{config_id}", response_model=LifecycleConfigResponse)
+def update_lifecycle_config(
+    config_id: int,
+    updated: LifecycleConfigCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    config = db.query(CustomerLifecycleConfig).filter(CustomerLifecycleConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+
+    config.stage = updated.stage
+    config.statuses = updated.statuses
+    db.commit()
+    db.refresh(config)
+    return config
+
+@router.post("/conversations/", response_model=ConversationResponse)
+def log_conversation(
+    convo: ConversationCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    new_convo = Conversation(**convo.dict())
+    db.add(new_convo)
+    db.commit()
+    db.refresh(new_convo)
+
+    log_audit(db, user.id, user.company_id, user.role, "Logged Conversation", 
+              "conversation", new_convo.id, None, new_convo.__dict__)
+
+    return new_convo
+
+
+@router.get("/conversations/", response_model=List[ConversationResponse])
+def filter_conversations(
+    customer_id: int,
+    channel: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    is_read: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Conversation).filter(Conversation.customer_id == customer_id)
+
+    if channel:
+        query = query.filter(Conversation.channel == channel)
+    if is_read is not None:
+        query = query.filter(Conversation.is_read == is_read)
+    if start_date:
+        query = query.filter(Conversation.timestamp >= start_date)
+    if end_date:
+        query = query.filter(Conversation.timestamp <= end_date)
+
+    return query.order_by(Conversation.timestamp.desc()).all()

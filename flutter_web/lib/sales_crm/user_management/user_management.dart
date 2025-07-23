@@ -81,7 +81,7 @@ Future<void> fetchAuditLogs() async {
   if (companyId == null) return;
   setState(() => isAuditLoading = true);
   try {
-    auditLogs = await userApi.getAuditLogs(companyId!,
+    auditLogs = await UserApiService.getAuditLogs(companyId!,
         startDate: startDate, endDate: endDate, action: selectedActionType);
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to load audit logs')));
@@ -494,7 +494,7 @@ Widget _buildAuditLogTile(dynamic log) {
     }
 
     return FutureBuilder<Map<String, int>>(
-      future: userApi.getEmployeeStatusSummary(companyId!),
+      future: UserApiService.getEmployeeStatusSummary(companyId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.white));
@@ -544,8 +544,8 @@ Widget _buildAuditLogTile(dynamic log) {
   });
 
   // Fetch both roles
-  final salesmen = await userApi.getEmployeesByRoleAndStatus(companyId!, 'salesman', status: status!);
-  final teamLeaders = await userApi.getEmployeesByRoleAndStatus(companyId!, 'team_leader', status: status);
+  final salesmen = await UserApiService.getEmployeesByRoleAndStatus(companyId!, 'salesman', status: status!);
+  final teamLeaders = await UserApiService.getEmployeesByRoleAndStatus(companyId!, 'team_leader', status: status);
 
   setState(() {
     employeeList = [...salesmen, ...teamLeaders];  // Combine both lists
@@ -608,7 +608,7 @@ Widget _buildAuditLogTile(dynamic log) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a status')));
                 return;
               }
-              await userApi.updateEmployeeStatus(employee['id'], selectedNewEmployeeStatus!);
+              await UserApiService.updateEmployeeStatus(employee['id'], selectedNewEmployeeStatus!);
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status Updated')));
               Navigator.pop(context);
               setState(() => employeeList.removeWhere((e) => e['id'] == employee['id']));
@@ -623,7 +623,7 @@ Widget _buildAuditLogTile(dynamic log) {
   Future<void> _updateEmployeePoints(dynamic employee, {required bool increment}) async {
     int currentPoints = employee['reward_points'] ?? 0;
     int newPoints = increment ? currentPoints + 1 : (currentPoints - 1).clamp(0, 9999);
-    await userApi.updateEmployeeRewardPoints(employee['id'], newPoints);
+    await UserApiService.updateEmployeeRewardPoints(employee['id'], newPoints);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Points Updated to $newPoints')));
     setState(() {
       employee['reward_points'] = newPoints;
@@ -636,7 +636,7 @@ Widget _buildAuditLogTile(dynamic log) {
     }
 
     return FutureBuilder<Map<String, int>>(
-      future: userApi.getCustomerStatusSummary(companyId!),
+      future: UserApiService.getCustomerStatusSummary(companyId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.white));
@@ -684,7 +684,7 @@ Widget _buildAuditLogTile(dynamic log) {
               selectedCustomerStatus = status;
               isCustomerLoading = true;
             });
-            filteredCustomers = await userApi.getCustomersByStatus(companyId!, status!);
+            filteredCustomers = await UserApiService.getCustomersByStatus(companyId!, status!);
             setState(() => isCustomerLoading = false);
           },
         ),
@@ -739,7 +739,7 @@ Widget _buildAuditLogTile(dynamic log) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a status')));
                   return;
                 }
-                await userApi.updateCustomerStatus(customer['id'], newStatus!);
+                await UserApiService.updateCustomerStatus(customer['id'], newStatus!);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status Updated')));
                 Navigator.pop(context);
                 setState(() => filteredCustomers.removeWhere((c) => c['id'] == customer['id']));
