@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 
 class UserApiService {
   static const baseUrl = ApiService.salesBaseUrl;
-  final Dio dio = Dio(BaseOptions(baseUrl: 'http://192.168.0.14:8000/api/sales'));
+  final Dio dio = Dio(BaseOptions(baseUrl: 'http://192.168.0.137:8000/api/sales'));
 
   // ✅ Fetch Users (http)
   static Future<List<dynamic>> fetchUsers(int companyId, {String? role}) async {
@@ -159,4 +159,15 @@ class UserApiService {
     final response = await dio.get('/employees/by-role-status', queryParameters: query);
     return response.data as List<dynamic>;
   }
+   Future<List<dynamic>> getAuditLogs(int companyId, {DateTime? startDate, DateTime? endDate, String? action}) async {
+  // Build query
+  String url = '$baseUrl/logs?company_id=$companyId';
+  if (startDate != null) url += '&start_date=${startDate.toIso8601String()}';
+  if (endDate != null) url += '&end_date=${endDate.toIso8601String()}';
+  if (action != null) url += '&action=$action';
+  final response = await http.get(Uri.parse(url));
+  return jsonDecode(response.body);
 }
+
+}
+

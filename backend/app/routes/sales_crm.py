@@ -4,10 +4,16 @@ from datetime import datetime
 from typing import List, Optional
 import json
 from sqlalchemy import func
+from ..utils.audit_logger import log_audit
+from ..auth import get_current_user
 
 from ..database import get_db
-from ..models import Company, Customer, Interaction, Task, FollowUp, User
+from ..models import Company, Customer, Interaction, Task, FollowUp, User, AuditLog
 from ..schemas import UserCreateSchema, UserResponseSchema
+
+from backend.app import schemas
+
+from backend.app import models
 
 router = APIRouter(prefix="/api/sales", tags=["Sales CRM Admin"])
 
@@ -21,10 +27,11 @@ def create_customer(
     pipeline_stage: str = Form(...),
     lead_status: str = Form(...),
     assigned_to: int = Form(...),
-    company_id: int = Form(...),  # ✅ Add this line
+    company_id: int = Form(...),
     notes: str = Form(None),
     email: str = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     customer = Customer(
         name=name,
@@ -33,7 +40,7 @@ def create_customer(
         pipeline_stage=pipeline_stage,
         lead_status=lead_status,
         assigned_to=assigned_to,
-        company_id=company_id,  # ✅ Set it here
+        company_id=company_id,
         notes=notes,
         email=email
     )
@@ -41,6 +48,10 @@ def create_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created Customer",
+              "customer", customer.id, None, customer.__dict__)
+
     return {"message": "Customer created", "customer_id": customer.id}
 
 @router.get("/customers/status-summary")
@@ -49,7 +60,7 @@ def get_customer_status_summary(company_id: int, db: Session = Depends(get_db)):
                       .filter(Customer.company_id == company_id)\
                       .group_by(Customer.account_status).all()
     return {status: count for status, count in status_counts}
-
+# 
 @router.get("/customers/filter-by-status")
 def filter_customers_by_status(company_id: int, status: str, db: Session = Depends(get_db)):
     return db.query(Customer)\
@@ -74,24 +85,45 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/customers/{customer_id}")
-def update_customer(customer_id: int, db: Session = Depends(get_db), **data):
+def update_customer(
+    customer_id: int, 
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user),
+    **data
+):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+
+    before = customer.__dict__.copy()
     for field, value in data.items():
         setattr(customer, field, value)
     db.commit()
     db.refresh(customer)
+
+    log_audit(db, user.id, user.company_id, user.role, "Updated Customer", 
+              "customer", customer.id, before, customer.__dict__)
+
     return {"message": "Customer updated"}
 
 
 @router.delete("/customers/{customer_id}")
-def delete_customer(customer_id: int, db: Session = Depends(get_db)):
+def delete_customer(
+    customer_id: int, 
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    
+    before = customer.__dict__.copy()
     db.delete(customer)
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Deleted Customer", 
+              "customer", customer_id, before, None)
+
     return {"message": "Customer deleted"}
 
 
@@ -104,7 +136,8 @@ def create_interaction(
     notes: str = Form(None),
     outcome: str = Form(None),
     next_action_date: str = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     interaction = Interaction(
         customer_id=customer_id,
@@ -114,10 +147,16 @@ def create_interaction(
         next_action_date=next_action_date or None,
         interaction_date=datetime.utcnow()
     )
+    
     db.add(interaction)
     db.commit()
     db.refresh(interaction)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created Interaction", 
+              "interaction", interaction.id, None, interaction.__dict__)
+
     return {"message": "Interaction logged", "interaction_id": interaction.id}
+
 
 
 @router.get("/interactions/")
@@ -135,7 +174,8 @@ def create_task(
     due_date: str = Form(...),
     priority: str = Form(...),
     status: str = Form(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     task = Task(
         title=title,
@@ -145,9 +185,14 @@ def create_task(
         priority=priority,
         status=status
     )
+    
     db.add(task)
     db.commit()
     db.refresh(task)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created Task", 
+              "task", task.id, None, task.__dict__)
+
     return {"message": "Task created", "task_id": task.id}
 
 
@@ -164,7 +209,8 @@ def create_followup(
     followup_date: str = Form(...),
     status: str = Form(...),
     notes: str = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     followup = FollowUp(
         customer_id=customer_id,
@@ -172,10 +218,16 @@ def create_followup(
         status=status,
         notes=notes
     )
+    
     db.add(followup)
     db.commit()
     db.refresh(followup)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created Follow-up", 
+              "followup", followup.id, None, followup.__dict__)
+
     return {"message": "Follow-up created", "followup_id": followup.id}
+
 
 
 @router.get("/followups/")
@@ -261,21 +313,31 @@ def update_features(company_id: int, updated_features: List[str], db: Session = 
 # =========================== ✅ USER MANAGEMENT ROUTES ===========================
 
 @router.post("/create-user", status_code=status.HTTP_201_CREATED)
-def create_user(user_data: UserCreateSchema, db: Session = Depends(get_db)):
+def create_user(
+    user_data: UserCreateSchema, 
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
+    
     new_user = User(
         full_name=user_data.full_name,
         email=user_data.email,
         phone=user_data.phone,
-        password=user_data.password,  # ✅ Password hashing to be handled in production
+        password=user_data.password,
         role=user_data.role,
         company_id=user_data.company_id
     )
+    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created User", 
+              "user", new_user.id, None, new_user.__dict__)
+
     return new_user
 
 
@@ -288,13 +350,24 @@ def list_users(company_id: int, role: Optional[str] = None, db: Session = Depend
 
 
 @router.delete("/delete-user/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+def delete_user(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    user_del = db.query(User).filter(User.id == user_id).first()
+    if not user_del:
         raise HTTPException(status_code=404, detail="User not found")
-    db.delete(user)
+    
+    before = user_del.__dict__.copy()
+    db.delete(user_del)
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Deleted User", 
+              "user", user_id, before, None)
+
     return {"message": "User deleted successfully"}
+
 
 
 # =========================== ✅ COMPANY SETTINGS (OPTIONAL) ===========================
@@ -312,45 +385,92 @@ def get_company_settings(company_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/update-company-settings")
-def update_company_settings(company_id: int, selected_features: List[str], db: Session = Depends(get_db)):
+def update_company_settings(
+    company_id: int, 
+    updated_features: List[str],
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    company.selected_features = selected_features
+    
+    before = {"features": company.selected_features.copy()}
+    company.selected_features = updated_features
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Updated Company Settings", 
+              "company", company.id, before, {"features": updated_features})
+
     return {"message": "Company settings updated"}
 
 @router.patch("/change-role/{user_id}")
-def change_user_role(user_id: int, new_role: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+def change_user_role(
+    user_id: int, 
+    new_role: str = Form(...),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    user.role = new_role
+    
+    before = {"role": u.role}
+    u.role = new_role
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Changed Role", 
+              "user", user_id, before, {"role": u.role})
+
     return {"message": "Role updated"}
 
 @router.patch("/assign-team-leader")
-def assign_team_leader(salesman_id: int = Form(...), team_leader_id: int = Form(...), db: Session = Depends(get_db)):
+def assign_team_leader(
+    salesman_id: int = Form(...), 
+    team_leader_id: int = Form(...),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     salesman = db.query(User).filter(User.id == salesman_id, User.role == 'salesman').first()
     if not salesman:
         raise HTTPException(status_code=404, detail="Salesman not found")
+    
     team_leader = db.query(User).filter(User.id == team_leader_id, User.role == 'team_leader').first()
     if not team_leader:
         raise HTTPException(status_code=404, detail="Team Leader not found")
+    
+    before = {"assigned_team_leader": salesman.assigned_team_leader}
     salesman.assigned_team_leader = team_leader_id
     db.commit()
-    return {"message": "Salesman assigned to Team Leader"}
+
+    log_audit(db, user.id, user.company_id, user.role, "Assigned Salesman", 
+              "user", salesman.id, before, {"assigned_team_leader": team_leader_id})
+
+    return {"message": "Assigned"}
 
 @router.patch("/assign-customers-criteria")
-def assign_customers_criteria(salesman_id: int = Form(...), pipeline_stage: Optional[str] = Form(None), lead_status: Optional[str] = Form(None), db: Session = Depends(get_db)):
+def assign_customers_criteria(
+    salesman_id: int = Form(...), 
+    pipeline_stage: Optional[str] = Form(None), 
+    lead_status: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     query = db.query(Customer).filter(Customer.assigned_to == None)
     if pipeline_stage:
         query = query.filter(Customer.pipeline_stage == pipeline_stage)
     if lead_status:
         query = query.filter(Customer.lead_status == lead_status)
+    
+    before_count = query.count()
     affected = query.update({"assigned_to": salesman_id}, synchronize_session=False)
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, f"Bulk Assigned {affected} Customers", 
+              "customer", None, {"unassigned": before_count}, {"assigned": affected})
+
     return {"message": f"{affected} customers assigned"}
+
 
 @router.get("/team-leader/{team_leader_id}/salesmen")
 def get_salesmen(team_leader_id: int, db: Session = Depends(get_db)):
@@ -404,13 +524,25 @@ def get_hierarchy(company_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/customers/update-status/{customer_id}")
-def update_customer_status(customer_id: int, new_status: str = Form(...), db: Session = Depends(get_db)):
+def update_customer_status(
+    customer_id: int, 
+    new_status: str = Form(...),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    
+    before = {"status": customer.account_status}
     customer.account_status = new_status
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Updated Customer Status", 
+              "customer", customer_id, before, {"status": new_status})
+
     return {"message": "Customer status updated successfully"}
+
 
 
 
@@ -423,21 +555,44 @@ def get_employee_status_summary(company_id: int, db: Session = Depends(get_db)):
     return {status: count for status, count in status_counts}
 
 @router.patch("/employees/update-status/{user_id}")
-def update_employee_status(user_id: int, new_status: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+def update_employee_status(
+    user_id: int, 
+    new_status: str = Form(...),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    user.account_status = new_status
+    
+    before = {"status": u.account_status}
+    u.account_status = new_status
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Updated Employee Status", 
+              "user", user_id, before, {"status": new_status})
+
     return {"message": "Employee status updated successfully"}
 
+
 @router.patch("/employees/update-rewards/{user_id}")
-def update_employee_rewards(user_id: int, reward_points: int = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+def update_employee_rewards(
+    user_id: int, 
+    reward_points: int = Form(...),
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    user.reward_points = reward_points
+    
+    before = {"reward_points": u.reward_points}
+    u.reward_points = reward_points
     db.commit()
+
+    log_audit(db, user.id, user.company_id, user.role, "Updated Reward Points", 
+              "user", user_id, before, {"reward_points": reward_points})
+
     return {"message": "Reward points updated successfully"}
 
 @router.get("/employees/by-role-status")
@@ -447,3 +602,45 @@ def get_employees_by_role_status(company_id: int, role: str, status: Optional[st
         query = query.filter(User.account_status == status)
     return query.all()
 
+@router.get("/logs", response_model=List[schemas.AuditLogOut])
+def get_audit_logs(
+    company_id: int,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    action: Optional[str] = None,
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AuditLog).filter(models.AuditLog.company_id == company_id)
+
+    if start_date:
+        query = query.filter(models.AuditLog.timestamp >= start_date)
+    if end_date:
+        query = query.filter(models.AuditLog.timestamp <= end_date)
+    if action:
+        query = query.filter(models.AuditLog.action.ilike(f"%{action}%"))
+    if user_id:
+        query = query.filter(models.AuditLog.user_id == user_id)
+
+    logs = query.order_by(models.AuditLog.timestamp.desc()).all()
+    return logs
+
+# POST log (Internal Only)
+@router.post("/log")
+def create_audit_log(log: schemas.AuditLogCreate, user_id: int, company_id: int, role: str, db: Session = Depends(get_db)):
+    new_log = models.AuditLog(
+        user_id=user_id,
+        company_id=company_id,
+        role=role,
+        action=log.action,
+        resource_type=log.resource_type,
+        resource_id=log.resource_id,
+        before_data=log.before_data,
+        after_data=log.after_data,
+        ip_address=log.ip_address,
+        device_info=log.device_info
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(new_log)
+    return {"message": "Audit log created successfully"}

@@ -138,3 +138,23 @@ class FollowUp(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    role = Column(String, nullable=False)
+
+    action = Column(String, nullable=False)  # e.g., 'Updated Customer'
+    resource_type = Column(String, nullable=False)  # 'customer', 'task', 'interaction'
+    resource_id = Column(Integer, nullable=True)
+
+    before_data = Column(JSON, nullable=True)
+    after_data = Column(JSON, nullable=True)
+
+    ip_address = Column(String, nullable=True)
+    device_info = Column(String, nullable=True)

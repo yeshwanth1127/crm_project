@@ -1,6 +1,6 @@
 from dataclasses import Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from pydantic import BaseModel, EmailStr, Field, constr
 from typing import Literal
 
@@ -122,6 +122,34 @@ class FollowUpResponse(FollowUpBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+
+class AuditLogCreate(BaseModel):
+    action: str
+    resource_type: str
+    resource_id: Optional[int]
+    before_data: Optional[Dict]
+    after_data: Optional[Dict]
+    ip_address: Optional[str]
+    device_info: Optional[str]
+
+# For responses to frontend
+class AuditLogOut(BaseModel):
+    id: int
+    timestamp: datetime
+    user_id: int
+    company_id: int
+    role: str
+    action: str
+    resource_type: str
+    resource_id: Optional[int]
+    before_data: Optional[Dict]
+    after_data: Optional[Dict]
+    ip_address: Optional[str]
+    device_info: Optional[str]
 
     class Config:
         orm_mode = True

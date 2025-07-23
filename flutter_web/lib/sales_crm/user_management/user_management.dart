@@ -47,6 +47,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   List<dynamic> customerList = [];
   List<String> pipelineStages = ['Prospecting', 'Qualified', 'Negotiation'];
   List<String> leadStatuses = ['lead', 'client'];
+  List<dynamic> auditLogs = [];
+  bool isAuditLoading = false;
+  DateTime? startDate, endDate;
+  String? selectedActionType;
+  List<String> actionTypes = ['Created Customer', 'Updated Customer', 'Deleted Customer', 'Created Task', 'Updated User Role', 'Assigned Salesman', 'Updated Company Settings'];
+
 
   bool isLoading = true;
   final RefreshController _refreshController = RefreshController(initialRefresh: false);
@@ -71,6 +77,103 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Company ID not found')));
     }
   }
+Future<void> fetchAuditLogs() async {
+  if (companyId == null) return;
+  setState(() => isAuditLoading = true);
+  try {
+    auditLogs = await userApi.getAuditLogs(companyId!,
+        startDate: startDate, endDate: endDate, action: selectedActionType);
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to load audit logs')));
+  }
+  setState(() => isAuditLoading = false);
+}
+Widget _buildAuditLogsPage() {
+  return Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      children: [
+        const Text('Audit Logs', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        _buildAuditFilters(),
+        const SizedBox(height: 10),
+        Expanded(
+          child: isAuditLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.white))
+              : ListView.builder(
+                  itemCount: auditLogs.length,
+                  itemBuilder: (context, index) => _buildAuditLogTile(auditLogs[index]),
+                ),
+        ),
+      ],
+    ),
+  );
+}
+Widget _buildAuditFilters() {
+  return Wrap(
+    spacing: 10,
+    children: [
+      ElevatedButton(
+        onPressed: () async {
+          final picked = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2024),
+            lastDate: DateTime.now(),
+          );
+          if (picked != null) {
+            setState(() {
+              startDate = picked.start;
+              endDate = picked.end;
+            });
+            fetchAuditLogs();
+          }
+        },
+        child: const Text('Select Date Range'),
+      ),
+      DropdownButton<String>(
+        hint: const Text('Select Action', style: TextStyle(color: Colors.white)),
+        value: selectedActionType,
+        dropdownColor: Colors.blueGrey,
+        items: actionTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+        onChanged: (value) {
+          setState(() => selectedActionType = value);
+          fetchAuditLogs();
+        },
+      ),
+      ElevatedButton(
+        onPressed: () {
+          setState(() {
+            startDate = null;
+            endDate = null;
+            selectedActionType = null;
+          });
+          fetchAuditLogs();
+        },
+        child: const Text('Clear Filters'),
+      ),
+    ],
+  );
+}
+Widget _buildAuditLogTile(dynamic log) {
+  return Card(
+    color: Colors.white.withOpacity(0.9),
+    child: ExpansionTile(
+      title: Text('${log['action']} by User ID: ${log['user_id']}',
+          style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text('At ${log['timestamp']}'),
+      children: [
+        if (log['before_data'] != null) ListTile(
+          title: const Text('Before Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(log['before_data'].toString()),
+        ),
+        if (log['after_data'] != null) ListTile(
+          title: const Text('After Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(log['after_data'].toString()),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _navButton(String title) {
     final isSelected = selectedUserPage == title;
@@ -342,7 +445,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   _buildAddUserPage(),
                   _buildRoleManagementPage(),
                   _buildAccountStatusPage(),
-                  Center(child: Text("Audit Logs Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+                  _buildAuditLogsPage(),
                   Center(child: Text("Password Reset Requests Page", style: TextStyle(color: Colors.white, fontSize: 20))),
                 ],
               ),
