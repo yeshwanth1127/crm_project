@@ -76,16 +76,17 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
   }
 
   void _applySearch() {
-    setState(() {
-      currentPage = 1;
-      filteredContacts = contacts.where((contact) {
-        final query = searchQuery.toLowerCase();
-        final name = (contact['name'] ?? '').toLowerCase();
-        final email = (contact['email'] ?? '').toLowerCase();
-        return name.contains(query) || email.contains(query);
-      }).toList();
-    });
-  }
+  setState(() {
+    currentPage = 1;
+    filteredContacts = contacts.where((contact) {
+      final query = searchQuery.toLowerCase();
+      final fullName = "${contact['first_name'] ?? ''} ${contact['last_name'] ?? ''}".toLowerCase();
+      final email = (contact['email'] ?? '').toLowerCase();
+      return fullName.contains(query) || email.contains(query);
+    }).toList();
+  });
+}
+
 
   List<Map<String, dynamic>> get paginatedContacts {
     final start = (currentPage - 1) * contactsPerPage;
@@ -97,10 +98,18 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
   }
 
   Future<void> _exportToCSV() async {
-  // Base headers
-  final headers = ["Name", "Email", "Phone", "Company", "Stage", "Status"];
+  final headers = [
+    "First Name",
+    "Last Name",
+    "Email",
+    "Phone",
+    "Company",
+    "Pipeline Stage",
+    "Lead Status",
+    "Account Status",
+    "Notes"
+  ];
 
-  // Collect all custom field keys across all contacts
   final Set<String> customFieldNames = {};
   for (var contact in filteredContacts) {
     final customFields = contact["custom_fields"] ?? {};
@@ -115,17 +124,18 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
   for (var contact in filteredContacts) {
     final custom = contact["custom_fields"] ?? {};
 
-    // Prepare main fields
     final row = [
-      contact["name"]?.toString() ?? "",
+      contact["first_name"]?.toString() ?? "",
+      contact["last_name"]?.toString() ?? "",
       contact["email"]?.toString() ?? "",
-      "'${contact["contact_number"]?.toString() ?? ""}", // quote to preserve formatting
+      "'${contact["contact_number"]?.toString() ?? ""}",
       contact["company_name"]?.toString() ?? "",
       contact["pipeline_stage"]?.toString() ?? "",
       contact["lead_status"]?.toString() ?? "",
+      contact["account_status"]?.toString() ?? "",
+      contact["notes"]?.toString() ?? "",
     ];
 
-    // Append custom fields in same order as header
     for (var field in customFieldNames) {
       row.add(custom[field]?.toString() ?? "");
     }
@@ -134,7 +144,6 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
   }
 
   final csvData = const ListToCsvConverter().convert(rows);
-
   final timestamp = DateTime.now().toIso8601String().split('.').first.replaceAll(':', '-');
   final fileName = "contacts_export_$timestamp.csv";
 
@@ -160,6 +169,7 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
     }
   }
 }
+
 
 
 
@@ -298,44 +308,53 @@ class _ReadContactsScreenState extends State<ReadContactsScreen> {
           const Text("No contacts found", style: TextStyle(color: Colors.white))
         else
           ...paginatedContacts.map((contact) {
-            final customFields = contact["custom_fields"] ?? {};
+            final _ = contact["custom_fields"] ?? {};
             return Card(
-              color: Colors.white.withOpacity(0.9),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              margin: const EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                title: Text(contact["name"] ?? "Unnamed"),
-                subtitle: Text("${contact["email"] ?? "-"} | ${contact["contact_number"] ?? "-"}"),
-                children: [
-                  ListTile(
-                    title: const Text("Company"),
-                    subtitle: Text(contact["company_name"] ?? "-"),
-                  ),
-                  ListTile(
-                    title: const Text("Pipeline Stage"),
-                    subtitle: Text(contact["pipeline_stage"] ?? "-"),
-                  ),
-                  ListTile(
-                    title: const Text("Lead Status"),
-                    subtitle: Text(contact["lead_status"] ?? "-"),
-                  ),
-                  if (customFields.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Custom Fields", style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          ...customFields.entries.map(
-                            (entry) => Text("${entry.key}: ${entry.value}"),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
+  color: Colors.white.withOpacity(0.9),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  margin: const EdgeInsets.only(bottom: 16),
+  child: ExpansionTile(
+    title: Text("${contact["first_name"] ?? ""} ${contact["last_name"] ?? ""}".trim()),
+    subtitle: Text("${contact["email"] ?? "-"} | ${contact["contact_number"] ?? "-"}"),
+    children: [
+      ListTile(
+        title: const Text("Company"),
+        subtitle: Text(contact["company_name"] ?? "-"),
+      ),
+      ListTile(
+        title: const Text("Pipeline Stage"),
+        subtitle: Text(contact["pipeline_stage"] ?? "-"),
+      ),
+      ListTile(
+        title: const Text("Lead Status"),
+        subtitle: Text(contact["lead_status"] ?? "-"),
+      ),
+      ListTile(
+        title: const Text("Account Status"),
+        subtitle: Text(contact["account_status"] ?? "-"),
+      ),
+      ListTile(
+        title: const Text("Notes"),
+        subtitle: Text(contact["notes"] ?? "-"),
+      ),
+      if ((contact["custom_fields"] ?? {}).isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Custom Fields", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...(contact["custom_fields"] as Map<String, dynamic>).entries.map(
+                (entry) => Text("${entry.key}: ${entry.value}"),
               ),
-            );
+            ],
+          ),
+        ),
+    ],
+  ),
+);
+
           }),
 
         // Pagination Controls

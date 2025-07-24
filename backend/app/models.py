@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, JSON, Enum
 from sqlalchemy.sql import func
 from .database import Base
 from sqlalchemy.orm import relationship
+import uuid
+
 
 from datetime import datetime
 
@@ -51,6 +53,8 @@ class Customer(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    interactions = relationship("Interaction", back_populates="customer", cascade="all, delete-orphan")
+
 
 
 
@@ -95,21 +99,6 @@ class FeaturePreset(Base):
     name = Column(String, unique=True, nullable=False)
     features = Column(JSON, nullable=False)  # {feature_key: true/false}
 
-
-class Interaction(Base):
-        __tablename__ = "interactions"
-
-        id = Column(Integer, primary_key=True, index=True)
-        
-        customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-        interaction_type = Column(String, nullable=False)  # call, visit, email, meeting, demo, etc.
-        interaction_date = Column(DateTime(timezone=True), server_default=func.now())
-        
-        notes = Column(Text, nullable=True)  # Optional notes about the interaction
-        outcome = Column(String, nullable=True)  # positive, neutral, negative or future custom status
-        next_action_date = Column(DateTime(timezone=True), nullable=True)  # Optional follow-up scheduling
-
-        created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -206,3 +195,67 @@ class Conversation(Base):
 
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+class Interaction(Base):
+    __tablename__ = "interactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    interaction_type = Column(String, nullable=False)      # e.g. Call, Email
+    subtype = Column(String, nullable=True)                # e.g. Outbound
+    content = Column(Text, nullable=True)                  # Notes
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    outcome = Column(String, nullable=True)                # e.g. Success
+    visibility = Column(String, default="public")          # public/internal
+    channel = Column(String, nullable=True)                # WhatsApp, Zoom
+    next_steps = Column(String, nullable=True)             # Optional
+    company_id = Column(Integer, ForeignKey("companies.id"))
+
+    customer = relationship("Customer", back_populates="interactions")
+    user = relationship("User")
+
+class TaskType(Base):
+    __tablename__ = "task_types"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class TaskAssignment(Base):
+    __tablename__ = "task_assignments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    task_type_id = Column(String, ForeignKey("task_types.id"), nullable=False)
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)  # ✅ NEW
+
+    title = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    priority = Column(Enum("low", "medium", "high", name="task_priority"), default="medium")
+    status = Column(Enum("assigned", "completed", name="task_status"), default="assigned")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    task_type = relationship("TaskType")
+    assigned_user = relationship("User", foreign_keys=[assigned_to])  # ✅ Used to access assigned user's name
+    assigned_by_user = relationship("User", foreign_keys=[assigned_by])
+    customer = relationship("Customer")  # ✅ New relationship to get customer name/info
+
+
+class TaskLog(Base):
+    __tablename__ = "task_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    task_id = Column(String, ForeignKey("task_assignments.id"), nullable=False)
+    action = Column(Enum("created", "completed", name="log_action"), nullable=False)
+    performed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    performed_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("TaskAssignment")
+    performer = relationship("User")

@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional
 import json
-from sqlalchemy import func
+from sqlalchemy import func, Enum
 from ..utils.audit_logger import log_audit, serialize_model
 from ..auth import get_current_user
 from ..models import CustomerCustomField, CustomerCustomValue
-from ..schemas import CustomFieldCreateSchema, CustomFieldSchema, CustomValueCreateSchema, CustomerCustomValueInput
+from ..schemas import CustomFieldCreateSchema, CustomFieldSchema, CustomValueCreateSchema, CustomerCustomValueInput, CustomerUpdate
 from ..database import get_db
 from ..models import Company, Customer, Interaction, Task, FollowUp, User, AuditLog
 from ..schemas import UserCreateSchema, UserResponseSchema
@@ -150,10 +150,10 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
 
 @router.put("/customers/{customer_id}")
 def update_customer(
-    customer_id: int, 
+    customer_id: int,
+    data: CustomerUpdate,  # ✅ JSON body handled here
     db: Session = Depends(get_db),
-    user = Depends(get_current_user),
-    **data
+    user=Depends(get_current_user)
 ):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
@@ -161,16 +161,17 @@ def update_customer(
 
     before = serialize_model(customer)
 
-    for field, value in data.items():
+    update_data = data.dict(exclude_unset=True)  # ✅ Only send provided fields
+    for field, value in update_data.items():
         setattr(customer, field, value)
+
     db.commit()
     db.refresh(customer)
 
-    log_audit(db, user.id, user.company_id, user.role, "Updated Customer", 
+    log_audit(db, user.id, user.company_id, user.role, "Updated Customer",
               "customer", customer.id, before, customer)
 
     return {"message": "Customer updated"}
-
 
 @router.delete("/customers/{customer_id}")
 def delete_customer(
@@ -192,42 +193,6 @@ def delete_customer(
 
     return {"message": "Customer deleted"}
 
-
-# ============================== ✅ INTERACTIONS ==============================
-
-@router.post("/interactions/")
-def create_interaction(
-    customer_id: int = Form(...),
-    interaction_type: str = Form(...),
-    notes: str = Form(None),
-    outcome: str = Form(None),
-    next_action_date: str = Form(None),
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
-):
-    interaction = Interaction(
-        customer_id=customer_id,
-        interaction_type=interaction_type,
-        notes=notes,
-        outcome=outcome,
-        next_action_date=next_action_date or None,
-        interaction_date=datetime.utcnow()
-    )
-    
-    db.add(interaction)
-    db.commit()
-    db.refresh(interaction)
-
-    log_audit(db, user.id, user.company_id, user.role, "Created Interaction", 
-              "interaction", interaction.id, None, interaction.__dict__)
-
-    return {"message": "Interaction logged", "interaction_id": interaction.id}
-
-
-
-@router.get("/interactions/")
-def get_interactions(db: Session = Depends(get_db)):
-    return db.query(Interaction).all()
 
 
 # ============================== ✅ TASKS ==============================
@@ -326,11 +291,12 @@ def get_analytics(company_id: int, db: Session = Depends(get_db)):
         .count()
     )
     pending_tasks = (
-        db.query(Task)
-        .join(User, User.id == Task.assigned_to)
-        .filter(User.company_id == company_id, Task.status == 'pending')
-        .count()
-    )
+    db.query(models.TaskAssignment)
+    .join(models.User, models.User.id == models.TaskAssignment.assigned_to)
+    .filter(models.User.company_id == company_id, models.TaskAssignment.status == 'assigned')
+    .count()
+)
+
     upcoming_followups = (
         db.query(FollowUp)
         .join(Customer, Customer.id == FollowUp.customer_id)
@@ -494,25 +460,21 @@ def change_user_role(
 def assign_team_leader(
     salesman_id: int = Form(...), 
     team_leader_id: int = Form(...),
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     salesman = db.query(User).filter(User.id == salesman_id, User.role == 'salesman').first()
     if not salesman:
         raise HTTPException(status_code=404, detail="Salesman not found")
-    
+
     team_leader = db.query(User).filter(User.id == team_leader_id, User.role == 'team_leader').first()
     if not team_leader:
         raise HTTPException(status_code=404, detail="Team Leader not found")
-    
-    before = {"assigned_team_leader": salesman.assigned_team_leader}
+
     salesman.assigned_team_leader = team_leader_id
     db.commit()
 
-    log_audit(db, user.id, user.company_id, user.role, "Assigned Salesman", 
-              "user", salesman.id, before, {"assigned_team_leader": team_leader_id})
-
     return {"message": "Assigned"}
+
 
 @router.patch("/assign-customers-criteria")
 def assign_customers_criteria(
@@ -849,3 +811,293 @@ def filter_conversations(
         query = query.filter(Conversation.timestamp <= end_date)
 
     return query.order_by(Conversation.timestamp.desc()).all()
+
+@router.post("/interactions/create", response_model=schemas.InteractionResponse)
+def log_interaction(
+    interaction: schemas.InteractionCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    new_interaction = Interaction(
+        customer_id=interaction.customer_id,
+        user_id=user.id,
+        interaction_type=interaction.interaction_type,
+        subtype=interaction.subtype,
+        content=interaction.content,
+        outcome=interaction.outcome,
+        visibility=interaction.visibility,
+        channel=interaction.channel,
+        next_steps=interaction.next_steps,
+        timestamp=datetime.utcnow(),
+        company_id=user.company_id
+    )
+
+    db.add(new_interaction)
+    db.commit()
+    db.refresh(new_interaction)
+
+    log_audit(db, user.id, user.company_id, user.role, "Created Interaction", 
+              "interaction", new_interaction.id, None, serialize_model(new_interaction))
+
+    return new_interaction
+
+@router.get("/interactions/by-customer/{customer_id}", response_model=List[schemas.InteractionResponse])
+def get_interactions_by_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    interactions = db.query(Interaction).filter(
+        Interaction.customer_id == customer_id,
+        Interaction.company_id == user.company_id
+    ).order_by(Interaction.timestamp.desc()).all()
+
+    return interactions
+
+@router.post("/task-types/")
+def create_task_type(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    existing = db.query(models.TaskType).filter(models.TaskType.name == name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Task type already exists")
+
+    task_type = models.TaskType(name=name, description=description)
+    db.add(task_type)
+    db.commit()
+    db.refresh(task_type)
+    return {"message": "Task type created", "task_type_id": task_type.id}
+
+
+@router.get("/task-types/")
+def get_task_types(db: Session = Depends(get_db)):
+    return db.query(models.TaskType).all()
+
+
+@router.post("/assign-task/")
+def assign_task(
+    task_data: schemas.TaskAssignmentCreate,
+    db: Session = Depends(get_db)
+):
+    task = models.TaskAssignment(
+        task_type_id=task_data.task_type_id,
+        assigned_by=task_data.assigned_by,
+        assigned_to=task_data.assigned_to,
+        customer_id=task_data.customer_id,  # ✅ Include customer_id here
+        title=task_data.title,
+        description=task_data.description,
+        due_date=task_data.due_date,
+        priority=task_data.priority,
+        status="assigned"
+    )
+
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    log = models.TaskLog(
+        task_id=task.id,
+        action="created",
+        performed_by=task_data.assigned_by
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Task assigned successfully", "task_id": task.id}
+
+@router.get("/tasks/by-company/{company_id}", response_model=List[schemas.TaskAssignmentOut])
+def get_tasks_by_company(company_id: int, db: Session = Depends(get_db)):
+    tasks = (
+        db.query(models.TaskAssignment)
+        .join(models.User, models.TaskAssignment.assigned_to == models.User.id)
+        .filter(models.User.company_id == company_id)
+        .all()
+    )
+    return [schemas.TaskAssignmentOut.from_orm_with_names(task) for task in tasks]
+
+@router.get("/tasks/assigned/")
+def get_assigned_tasks(
+    company_id: int,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.TaskAssignment).join(models.User, models.User.id == models.TaskAssignment.assigned_to)\
+                .filter(models.User.company_id == company_id)
+    if status:
+        query = query.filter(models.TaskAssignment.status == status)
+    return query.order_by(models.TaskAssignment.due_date.asc()).all()
+
+
+@router.patch("/tasks/complete/{task_id}")
+def mark_task_complete(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    task = db.query(models.TaskAssignment).filter(models.TaskAssignment.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status == "completed":
+        raise HTTPException(status_code=400, detail="Task already completed")
+
+    task.status = "completed"
+    task.completed_at = datetime.utcnow()
+    db.commit()
+
+    # Log using the assigned_by as a placeholder since there's no auth user
+    log = models.TaskLog(
+        task_id=task.id,
+        action="completed",
+        performed_by=task.assigned_by  # Using assigned_by user ID
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Task marked as completed"}
+
+
+
+@router.get("/tasks/logs/")
+def get_task_logs(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.TaskLog).join(models.TaskAssignment, models.TaskLog.task_id == models.TaskAssignment.id)\
+            .join(models.User, models.TaskAssignment.assigned_to == models.User.id)\
+            .filter(models.User.company_id == company_id)\
+            .order_by(models.TaskLog.performed_at.desc())
+    return query.all()
+
+@router.get("/tasks/user/{user_id}")
+def get_tasks_for_user(
+    user_id: int,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.TaskAssignment).filter(models.TaskAssignment.assigned_to == user_id)
+    if status:
+        query = query.filter(models.TaskAssignment.status == status)
+    return query.order_by(models.TaskAssignment.due_date.asc()).all()
+
+@router.post("/init-task-types/")
+def initialize_task_types(db: Session = Depends(get_db)):
+    task_names = [
+        ("Follow-Up", "Reminder to follow up after a call or meeting."),
+        ("Call", "Scheduled phone call with lead or client."),
+        ("Email", "Send an important email to the customer."),
+        ("Meeting", "Set up a virtual or in-person meeting."),
+        ("Document Sharing", "Send proposal, invoice or files."),
+        ("Internal Reminder", "Internal admin or team task."),
+        ("Recurring Task", "Weekly/monthly check-in or process."),
+        ("Pipeline Action", "Task triggered by pipeline movement."),
+        ("Feedback Request", "Ask for feedback or review."),
+        ("Deal Closure", "Final steps to close a deal."),
+    ]
+
+    existing = db.query(models.TaskType).count()
+    if existing >= 10:
+        return {"message": "Task types already initialized."}
+
+    for name, desc in task_names:
+        task_type = models.TaskType(name=name, description=desc)
+        db.add(task_type)
+
+    db.commit()
+    return {"message": "10 task types initialized successfully."}
+
+
+
+@router.get("/team-leader/{team_leader_id}/overview")
+def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depends(get_db)):
+    # Step 1: Get all salesmen under this team leader
+    salesmen = db.query(User).filter(
+        User.assigned_team_leader == team_leader_id,
+        User.role == 'salesman'
+    ).all()
+
+    salesmen_ids = [s.id for s in salesmen]
+    if not salesmen_ids:
+        return {
+            "salesmen": [],
+            "customers": [],
+            "pipeline_summary": {},
+            "task_summary": {"assigned": 0, "completed": 0},
+            "followups": {"due_today": 0, "upcoming": 0}
+        }
+
+    # Step 2: Get all customers assigned to those salesmen
+    customers = db.query(Customer).filter(Customer.assigned_to.in_(salesmen_ids)).all()
+
+    # Step 3: Pipeline stage grouping
+    pipeline_counts = {}
+    for customer in customers:
+        stage = customer.pipeline_stage or "Unspecified"
+        pipeline_counts[stage] = pipeline_counts.get(stage, 0) + 1
+
+    # Step 4: Task summary
+    assigned_tasks = db.query(models.TaskAssignment).filter(
+        models.TaskAssignment.assigned_to.in_(salesmen_ids),
+        models.TaskAssignment.status == "assigned"
+    ).count()
+
+    completed_tasks = db.query(models.TaskAssignment).filter(
+        models.TaskAssignment.assigned_to.in_(salesmen_ids),
+        models.TaskAssignment.status == "completed"
+    ).count()
+
+    # Step 5: Follow-up summary
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    followups_due_today = db.query(FollowUp).join(Customer).filter(
+        Customer.assigned_to.in_(salesmen_ids),
+        FollowUp.followup_date >= today_start,
+        FollowUp.followup_date < today_end
+    ).count()
+
+    upcoming_followups = db.query(FollowUp).join(Customer).filter(
+        Customer.assigned_to.in_(salesmen_ids),
+        FollowUp.followup_date > today_end
+    ).count()
+
+    return {
+        "salesmen": [
+            {
+                "id": s.id,
+                "name": s.full_name,
+                "email": s.email,
+                "phone": s.phone,
+                "reward_points": s.reward_points,
+                "account_status": s.account_status
+            }
+            for s in salesmen
+        ],
+        "customers": [
+            {
+                "id": c.id,
+                "first_name": c.first_name,
+                "last_name": c.last_name,
+                "email": c.email,
+                "contact_number": c.contact_number,
+                "assigned_to": c.assigned_to,
+                "pipeline_stage": c.pipeline_stage,
+                "lead_status": c.lead_status,
+                "account_status": c.account_status
+            }
+            for c in customers
+        ],
+        "pipeline_summary": pipeline_counts,
+        "task_summary": {
+            "assigned": assigned_tasks,
+            "completed": completed_tasks
+        },
+        "followups": {
+            "due_today": followups_due_today,
+            "upcoming": upcoming_followups
+        }
+    }

@@ -4,6 +4,8 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, EmailStr, Field, constr
 from typing import Literal
 
+from sqlalchemy import Enum
+
 class OnboardingSchema(BaseModel):
     company_name: str
     company_size: str
@@ -212,3 +214,131 @@ class ConversationResponse(ConversationCreate):
 
     class Config:
         orm_mode = True
+
+class CustomerUpdate(BaseModel):
+    first_name: Optional[str]
+    last_name: Optional[str]
+    email: Optional[str]
+    contact_number: Optional[str]
+    company_name: Optional[str]
+    pipeline_stage: Optional[str]
+    lead_status: Optional[str]
+    notes: Optional[str]
+    account_status: Optional[str]
+
+class InteractionCreate(BaseModel):
+    customer_id: int
+    interaction_type: str
+    subtype: Optional[str]
+    content: Optional[str]
+    outcome: Optional[str]
+    visibility: Optional[str] = "public"
+    channel: Optional[str]
+    next_steps: Optional[str]
+
+class InteractionResponse(BaseModel):
+    id: int
+    customer_id: int
+    user_id: int
+    interaction_type: str
+    subtype: Optional[str]
+    content: Optional[str]
+    timestamp: datetime
+    outcome: Optional[str]
+    visibility: Optional[str]
+    channel: Optional[str]
+    next_steps: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+class TaskTypeBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class TaskTypeCreate(TaskTypeBase):
+    pass
+
+class TaskTypeOut(TaskTypeBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class TaskPriority(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+class TaskStatus(str, Enum):
+    assigned = "assigned"
+    completed = "completed"
+
+class TaskAssignmentBase(BaseModel):
+    task_type_id: str
+    assigned_to: int
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    priority: Optional[TaskPriority] = TaskPriority.medium
+
+class TaskAssignmentCreate(TaskAssignmentBase):
+    assigned_by: int  # Admin ID
+    customer_id: Optional[int] = None  # ✅ New field for customer linkage
+
+class TaskAssignmentUpdate(BaseModel):
+    status: Optional[TaskStatus] = None
+    completed_at: Optional[datetime] = None
+
+class TaskAssignmentOut(TaskAssignmentBase):
+    id: str
+    assigned_by: int
+    status: TaskStatus
+    created_at: datetime
+    completed_at: Optional[datetime]
+
+    customer_id: Optional[int]
+    customer_name: Optional[str]
+    assigned_to_name: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+    @classmethod
+    def from_orm_with_names(cls, task):
+        return cls(
+            id=task.id,
+            task_type_id=task.task_type_id,
+            assigned_by=task.assigned_by,
+            assigned_to=task.assigned_to,
+            customer_id=task.customer_id,
+            customer_name=f"{task.customer.first_name} {task.customer.last_name}" if task.customer else None,
+            assigned_to_name=task.assigned_user.full_name if task.assigned_user else None,
+            title=task.title,
+            description=task.description,
+            due_date=task.due_date,
+            priority=task.priority,
+            status=task.status,
+            created_at=task.created_at,
+            completed_at=task.completed_at
+        )
+
+
+class TaskLogAction(str, Enum):
+    created = "created"
+    completed = "completed"
+
+class TaskLogBase(BaseModel):
+    task_id: str
+    action: TaskLogAction
+    performed_by: int
+
+class TaskLogOut(TaskLogBase):
+    id: str
+    performed_at: datetime
+
+    class Config:
+        orm_mode = True
+
+

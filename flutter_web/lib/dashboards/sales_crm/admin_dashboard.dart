@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_web/sales_crm/api/user_api_service.dart';
+import 'package:flutter_web/sales_crm/interactions/interactions_home_screen.dart';
+// ignore: unused_import
+import 'package:flutter_web/sales_crm/tasks/task_list_screen.dart';
+import 'package:flutter_web/sales_crm/tasks/task_models.dart';
+import 'package:flutter_web/sales_crm/tasks/task_type_selection_screen.dart';
 import 'package:flutter_web/sales_crm/user_management/user_management.dart';
 import 'package:flutter_web/services/api_service.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -29,6 +35,15 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> {
     super.initState();
     fetchDashboardData();
   }
+  Future<Customer> fetchCustomer() async {
+  final customers = await UserApiService.fetchCustomers(widget.companyId);
+  if (customers.isNotEmpty) {
+    return customers.first;
+  } else {
+    throw Exception("No customers available");
+  }
+}
+
 
   Future<void> fetchDashboardData() async {
     setState(() {
@@ -82,22 +97,40 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> {
               ),
             ),
             Expanded(
-              flex: 5,
-              child: IndexedStack(
-                index: _getPageIndex(selectedPage),
-                children: [
-                  _buildDashboardOverview(),
-                  CustomersHome(companyId: widget.companyId),
-                  Center(child: Text("Interactions Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                  Center(child: Text("Tasks Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                  Center(child: Text("Follow-ups Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                  Center(child: Text("Pipeline Analytics Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                  Center(child: Text("User Management Page")),
-                  Center(child: Text("Feature Settings Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                  Center(child: Text("Company Settings Page", style: TextStyle(color: Colors.white, fontSize: 20))),
-                ],
-              ),
-            ),
+  flex: 5,
+  child: IndexedStack(
+    index: _getPageIndex(selectedPage),
+    children: [
+      _buildDashboardOverview(),
+      CustomersHome(companyId: widget.companyId),
+      InteractionsHomeScreen(),
+      FutureBuilder<Customer>(
+        future: fetchCustomer(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          } else if (snapshot.hasData) {
+            return TaskTypeSelectionScreen(
+              companyId: widget.companyId,
+              customer: snapshot.data!,
+            );
+          } else {
+            return const Center(child: Text("No customer found"));
+          }
+        },
+      ),
+      const Center(child: Text("Follow-ups Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+      const Center(child: Text("Pipeline Analytics Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+      const Center(child: Text("User Management Page")),
+      const Center(child: Text("Feature Settings Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+      const Center(child: Text("Company Settings Page", style: TextStyle(color: Colors.white, fontSize: 20))),
+    ],
+  ),
+),
+
+
           ],
         ),
       ),

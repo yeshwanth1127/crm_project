@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter_web/sales_crm/tasks/task_models.dart';
 import 'package:flutter_web/services/api_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,14 +31,16 @@ class UserApiService {
 }
 
   // ✅ Fetch Customers
-  static Future<List<dynamic>> fetchCustomers(int companyId) async {
-    final response = await http.get(Uri.parse('$baseUrl/customers/?company_id=$companyId'));
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch customers: ${response.body}');
-    }
+  static Future<List<Customer>> fetchCustomers(int companyId) async {
+  final response = await http.get(Uri.parse('$baseUrl/customers/?company_id=$companyId'));
+  if (response.statusCode == 200) {
+    final List data = jsonDecode(response.body);
+    return data.map((json) => Customer.fromJson(json)).toList();  // ✅ Return proper Customer objects
+  } else {
+    throw Exception('Failed to fetch customers: ${response.body}');
   }
+}
+
 
   // ✅ Create User
   static Future<dynamic> createUser(Map<String, dynamic> userData) async {
@@ -534,6 +537,214 @@ static Future<void> saveCustomValues(List<Map<String, dynamic>> values) async {
     return data.map((e) => Map<String, dynamic>.from(e)).toList();
   } else {
     throw Exception("Failed to load custom fields");
+  }
+}
+static Future<void> logInteraction(Map<String, dynamic> data) async {
+  final uri = Uri.parse('$baseUrl/interactions/create');
+  final headers = await _getAuthHeaders(); // Add your auth header method
+
+  final response = await http.post(
+    uri,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+    body: json.encode(data),
+  );
+
+  if (response.statusCode != 200 && response.statusCode != 201) {
+    throw Exception('Failed to log interaction: ${response.body}');
+  }
+}
+
+static Future<List<Map<String, dynamic>>> getInteractionsByCustomer(int customerId) async {
+  final uri = Uri.parse('$baseUrl/interactions/by-customer/$customerId');
+  final headers = await _getAuthHeaders();
+
+  final response = await http.get(uri, headers: headers);
+  if (response.statusCode == 200) {
+    final List<dynamic> data = json.decode(response.body);
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  } else {
+    throw Exception('Failed to fetch interactions: ${response.body}');
+  }
+}
+static Future<List<Map<String, dynamic>>> getUsersByRole(int companyId, String role) async {
+  final uri = Uri.parse('$baseUrl/list-users?company_id=$companyId&role=$role');
+  final headers = await _getAuthHeaders();
+
+  final response = await http.get(uri, headers: headers);
+  if (response.statusCode == 200) {
+    final List<dynamic> data = json.decode(response.body);
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  } else {
+    throw Exception('Failed to load users by role: ${response.body}');
+  }
+}
+static Future<List<Map<String, dynamic>>> getCustomersByCompany(int companyId) async {
+  final uri = Uri.parse('$baseUrl/customers?company_id=$companyId');
+  final headers = await _getAuthHeaders();
+
+  final response = await http.get(uri, headers: headers);
+  if (response.statusCode == 200) {
+    final List<dynamic> data = json.decode(response.body);
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  } else {
+    throw Exception('Failed to load customers: ${response.body}');
+  }
+}
+static Future<List<Map<String, dynamic>>> getCustomersBySalesman(int salesmanId) async {
+  final uri = Uri.parse('$baseUrl/salesman/$salesmanId/customers');
+  final headers = await _getAuthHeaders();
+
+  final response = await http.get(uri, headers: headers);
+  if (response.statusCode == 200) {
+    final List<dynamic> data = json.decode(response.body);
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  } else {
+    throw Exception('Failed to load customers by salesman: ${response.body}');
+  }
+}
+static Future<int> getCompanyId() async {
+  final prefs = await SharedPreferences.getInstance();
+  final companyId = prefs.getInt('company_id');
+  if (companyId == null) throw Exception('Company ID not found in session');
+  return companyId;
+}
+// 1. Get all task types
+  static Future<List<TaskType>> fetchTaskTypes() async {
+    final response = await http.get(Uri.parse("$baseUrl/task-types/"));
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((json) => TaskType.fromJson(json)).toList();
+    } else {
+      throw Exception("Failed to load task types");
+    }
+  }
+
+  // 2. Assign a task
+  static Future<bool> assignTask(TaskAssignmentCreate task) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/assign-task/"),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(task.toJson()),
+    );
+    return response.statusCode == 200;
+  }
+
+  // 3. Get all assigned tasks for a company (optionally filter by status)
+  static Future<List<TaskAssignment>> fetchTasksByCompany(int companyId) async {
+  final response = await http.get(Uri.parse("$baseUrl/tasks/by-company/$companyId"));
+
+  if (response.statusCode == 200) {
+    final List data = jsonDecode(response.body);
+    return data.map((json) => TaskAssignment.fromJson(json)).toList();
+  } else {
+    throw Exception("Failed to load tasks");
+  }
+}
+
+
+
+
+  // 4. Get tasks assigned to a specific user
+  static Future<List<TaskAssignment>> fetchTasksByUser({
+    required int userId,
+    String? status,
+  }) async {
+    final uri = Uri.parse("$baseUrl/tasks/user/$userId")
+        .replace(queryParameters: {
+          if (status != null) 'status': status,
+        });
+
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((json) => TaskAssignment.fromJson(json)).toList();
+    } else {
+      throw Exception("Failed to load user tasks");
+    }
+  }
+
+  // 5. Mark a task as completed
+  static Future<bool> markTaskAsCompleted(String taskId) async {
+    final response = await http.patch(
+      Uri.parse("$baseUrl/tasks/complete/$taskId"),
+    );
+    return response.statusCode == 200;
+  }
+
+  // 6. Get task logs
+  static Future<List<TaskLog>> fetchTaskLogs({required int companyId}) async {
+    final uri = Uri.parse("$baseUrl/tasks/logs/")
+        .replace(queryParameters: {'company_id': companyId.toString()});
+
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((json) => TaskLog.fromJson(json)).toList();
+    } else {
+      throw Exception("Failed to load task logs");
+    }
+  }
+
+  // 7. Get all team leaders + salesmen (user selection)
+  static Future<List<User>> fetchSalesAndTeamUsers(int companyId) async {
+    final uri = Uri.parse("$baseUrl/list-users")
+        .replace(queryParameters: {'company_id': companyId.toString()});
+
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data
+          .map((json) => User.fromJson(json))
+          .where((u) => u.role == 'salesman' || u.role == 'team_leader')
+          .toList();
+    } else {
+      throw Exception("Failed to load users");
+    }
+  }
+  static Future<bool> initializeTaskTypes() async {
+  final response = await http.post(Uri.parse("$baseUrl/init-task-types/"));
+  return response.statusCode == 200;
+}
+static Future<List<Customer>> fetchCustomersByCompany(int companyId) async {
+  final response = await http.get(Uri.parse("$baseUrl/customers/by-company/$companyId"));
+  if (response.statusCode == 200) {
+    final List data = jsonDecode(response.body);
+    return data.map((json) => Customer.fromJson(json)).toList();
+  } else {
+    throw Exception('Failed to load customers');
+  }
+}
+static Future<int> getTeamLeaderIdByEmail(String email, String token, int companyId) async {
+  final response = await http.get(
+    Uri.parse('$baseUrl/list-users?company_id=$companyId&role=team_leader'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  if (response.statusCode == 200) {
+    final users = json.decode(response.body);
+    final user = users.firstWhere(
+      (u) => u['email'].toLowerCase() == email.toLowerCase(),
+      orElse: () => null,
+    );
+    if (user == null) throw Exception('Team Leader with this email not found.');
+    return user['id'];
+  } else {
+    throw Exception('Failed to fetch Team Leader ID');
+  }
+}
+
+
+static Future<Map<String, dynamic>> getTeamLeaderOverview(int teamLeaderId, String token) async {
+  final response = await http.get(
+    Uri.parse('$baseUrl/team-leader/$teamLeaderId/overview'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  if (response.statusCode == 200) {
+    return json.decode(response.body);
+  } else {
+    throw Exception('Failed to load dashboard data');
   }
 }
 

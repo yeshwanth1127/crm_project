@@ -5,6 +5,8 @@ import 'package:flutter_web/dashboards/sales_crm/admin_dashboard.dart';
 import 'package:flutter_web/dashboards/sales_crm/salesman_dashboard.dart';
 import 'package:flutter_web/dashboards/sales_crm/team_leader_dashboard.dart';
 import 'package:flutter_web/dashboards/support_crm/support_staff_dashboard.dart';
+import 'package:flutter_web/sales_crm/interactions/interaction_form_screen.dart';
+import 'package:flutter_web/sales_crm/interactions/interaction_timeline_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'pages/landing_screen.dart';
 import 'pages/onboarding_screen.dart';
@@ -28,6 +30,8 @@ class MyCRMApp extends StatelessWidget {
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
         '/login': (context) => const LoginScreen(),
+        '/log-interaction': (context) => LogInteractionFormScreen(),
+'/interaction-timeline': (context) => InteractionTimelineScreen(),
       },
     );
   }

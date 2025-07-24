@@ -1,16 +1,24 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.inspection import inspect
 from backend.app import models
+import json
 
 def serialize_model(model):
+    """
+    Converts SQLAlchemy model to a clean dictionary of DB columns only.
+    Handles datetime conversion. Excludes internal attributes like _sa_instance_state.
+    """
     if model is None:
         return None
+
     return {
-        key: (
-            value.isoformat() if isinstance(value, datetime) else value
+        column.key: (
+            getattr(model, column.key).isoformat()
+            if isinstance(getattr(model, column.key), datetime)
+            else getattr(model, column.key)
         )
-        for key, value in vars(model).items()
-        if not key.startswith("_")
+        for column in inspect(model).mapper.column_attrs
     }
 
 
@@ -27,7 +35,7 @@ def log_audit(
     ip_address: str = None,
     device_info: str = None
 ):
-    # Serialize model instances to clean dict
+    # Clean model instances to safe dicts
     if hasattr(before_data, "__table__"):
         before_data = serialize_model(before_data)
     if hasattr(after_data, "__table__"):
@@ -43,8 +51,10 @@ def log_audit(
         before_data=before_data,
         after_data=after_data,
         ip_address=ip_address,
-        device_info=device_info
+        device_info=device_info,
+        timestamp=datetime.utcnow()
     )
+
     try:
         db.add(log)
         db.commit()
