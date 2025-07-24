@@ -37,6 +37,10 @@ dependencies:
   lottie: ^3.1.0
   dio: ^5.8.0+1
   intl: ^0.20.2
+  path_provider: ^2.1.1
+  share_plus: ^7.2.1
+  csv: ^5.0.0
+  file_saver: ^0.2.7
 
 
 
@@ -65,6 +69,7 @@ flutter:
   assets:
     - assets/animations/landing_page.json
     - assets/images/orbitcrm_logo.png
+    - assets/images/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'customer_operations_screen.dart';
 import 'custom_fields_screen.dart';
@@ -6,107 +7,180 @@ import 'sync_contacts_screen.dart';
 import 'conversations_screen.dart';
 import 'inbox_integration_screen.dart';
 
-class CustomersHome extends StatelessWidget {
+class CustomersHome extends StatefulWidget {
   final int companyId;
   const CustomersHome({super.key, required this.companyId});
 
   @override
+  State<CustomersHome> createState() => _CustomersHomeState();
+}
+
+class _CustomersHomeState extends State<CustomersHome>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Color?> _color1;
+  late Animation<Color?> _color2;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(seconds: 6))
+          ..repeat(reverse: true);
+
+    _color1 = ColorTween(begin: Colors.blue.shade300, end: Colors.purple.shade200)
+        .animate(_controller);
+    _color2 = ColorTween(begin: Colors.pink.shade100, end: Colors.orange.shade200)
+        .animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  final List<_FeatureCard> features = [];
+
+  @override
   Widget build(BuildContext context) {
-    final List<_FeatureCard> features = [
+    features.clear();
+    features.addAll([
       _FeatureCard(
         title: "Customer Operations",
-        icon: Icons.people,
-        destination: CustomerOperationsScreen(companyId: companyId),
+        imageAsset: 'assets/images/customers.png',
+        destination: CustomerOperationsScreen(companyId: widget.companyId),
       ),
       _FeatureCard(
         title: "Add Custom Fields",
-        icon: Icons.settings,
-        destination: CustomFieldsScreen(companyId: companyId),
+        imageAsset: 'assets/images/custom_fields.png',
+        destination: CustomFieldsScreen(companyId: widget.companyId),
       ),
       _FeatureCard(
         title: "Lifecycle & Status Config",
-        icon: Icons.timeline,
-        destination: LifecycleConfigScreen(companyId: companyId),
+        imageAsset: 'assets/images/lifecycle.png',
+        destination: LifecycleConfigScreen(companyId: widget.companyId),
       ),
       _FeatureCard(
         title: "Sync Contact Data",
-        icon: Icons.sync_alt,
-        destination: SyncContactsScreen(companyId: companyId),
+        imageAsset: 'assets/images/sync.png',
+        destination: SyncContactsScreen(companyId: widget.companyId),
       ),
       _FeatureCard(
         title: "Conversations",
-        icon: Icons.chat_outlined,
-        destination: ConversationsScreen(companyId: companyId),
+        imageAsset: 'assets/images/chat.png',
+        destination: ConversationsScreen(companyId: widget.companyId),
       ),
       _FeatureCard(
         title: "Inbox Integration",
-        icon: Icons.inbox_outlined,
-        destination: InboxIntegrationScreen(companyId: companyId),
+        imageAsset: 'assets/images/inbox.png',
+        destination: InboxIntegrationScreen(companyId: widget.companyId),
       ),
-    ];
+    ]);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Customer Management"),
-        backgroundColor: Colors.blue.shade700,
-        centerTitle: true,
-      ),
-      backgroundColor: Colors.grey.shade100,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: GridView.count(
-          crossAxisCount: 3,
-          crossAxisSpacing: 24,
-          mainAxisSpacing: 24,
-          children: features.map((feature) {
-            return GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => feature.destination),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text("Customer Management"),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+          ),
+          extendBodyBehindAppBar: true,
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_color1.value!, _color2.value!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                color: Colors.white,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(feature.icon, size: 48, color: Colors.blue.shade600),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          feature.title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GridView.builder(
+                      itemCount: features.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: 1,
                       ),
-                    ],
-                  ),
+                      itemBuilder: (context, index) {
+                        final feature = features[index];
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => feature.destination,
+                              ),
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white30),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                      feature.imageAsset,
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.contain,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text(
+                                        feature.title,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
-            );
-          }).toList(),
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
 class _FeatureCard {
   final String title;
-  final IconData icon;
+  final String imageAsset;
   final Widget destination;
 
   _FeatureCard({
     required this.title,
-    required this.icon,
+    required this.imageAsset,
     required this.destination,
   });
 }

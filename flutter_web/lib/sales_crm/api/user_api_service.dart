@@ -350,18 +350,29 @@ static Future<http.Response> _handleRequest(Future<http.Response> request) async
     }
   }
 
-  static Future<bool> updateCustomer(int id, Map<String, dynamic> data) async {
-    final uri = Uri.parse('$baseUrl/customers/$id');
-    final headers = await _getAuthHeaders();
+  static Future<bool> updateCustomer(int customerId, Map<String, dynamic> data) async {
+  final uri = Uri.parse('$baseUrl/customers/$customerId');
+  final headers = await _getAuthHeaders();
 
-    final response = await http.put(
-      uri,
-      headers: headers,
-      body: json.encode(data),
-    );
+  final response = await http.put(
+    uri,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode(data),
+  );
 
-    return response.statusCode == 200;
+  print("PUT $uri => ${response.statusCode}");
+  print("Response body: ${response.body}");
+
+  if (response.statusCode == 200) {
+    return true;
+  } else {
+    throw Exception("Failed to update customer: ${response.statusCode}");
   }
+}
+
 
   static Future<void> saveCustomFieldValues(List<Map<String, dynamic>> values) async {
     final uri = Uri.parse('$baseUrl/custom-values/');

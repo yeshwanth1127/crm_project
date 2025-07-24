@@ -11,61 +11,97 @@ class UpdateContactScreen extends StatefulWidget {
 
 class _UpdateContactScreenState extends State<UpdateContactScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _idController = TextEditingController();
-
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _companyController = TextEditingController();
 
+  List<Map<String, dynamic>> salesmen = [];
+  List<Map<String, dynamic>> customers = [];
+  Map<String, dynamic> selectedCustomer = {};
+
   Map<String, dynamic> customFieldValues = {};
   List<Map<String, dynamic>> customFields = [];
 
-  bool isLoading = false;
+  int? selectedSalesmanId;
+  int? selectedCustomerId;
+
+  bool isLoading = true;
   bool isSubmitting = false;
-  bool customerLoaded = false;
 
-  Future<void> loadCustomer() async {
-    final id = int.tryParse(_idController.text.trim());
-    if (id == null) return;
+  @override
+  void initState() {
+    super.initState();
+    fetchSalesmen();
+  }
 
+  Future<void> fetchSalesmen() async {
+    try {
+      final result = await UserApiService.getSalesmen(widget.companyId);
+      setState(() => salesmen = result);
+    } catch (_) {}
+    fetchCustomers();
+  }
+
+  Future<void> fetchCustomers() async {
     setState(() {
       isLoading = true;
-      customerLoaded = false;
+      selectedCustomerId = null;
+      selectedCustomer = {};
     });
+
+    try {
+      final result = selectedSalesmanId == null
+          ? await UserApiService.getAllCustomers(widget.companyId)
+          : await UserApiService.getCustomersOfSalesman(selectedSalesmanId!);
+      setState(() => customers = result);
+    } catch (_) {}
+    setState(() => isLoading = false);
+  }
+
+  Future<void> loadCustomerDetails(int id) async {
+    setState(() => isLoading = true);
 
     try {
       final customer = await UserApiService.getCustomerById(id);
       final fields = await UserApiService.getCustomFields(widget.companyId);
 
       setState(() {
-        _nameController.text = customer["name"] ?? "";
+        _firstNameController.text = customer["first_name"] ?? "";
+        _lastNameController.text = customer["last_name"] ?? "";
         _emailController.text = customer["email"] ?? "";
         _phoneController.text = customer["contact_number"] ?? "";
         _companyController.text = customer["company_name"] ?? "";
 
         customFields = fields;
-        customFieldValues = Map<String, dynamic>.from(customer["custom_fields"] ?? {});
-        customerLoaded = true;
+        final rawFields = customer["custom_fields"] ?? [];
+        customFieldValues = {
+          for (var f in rawFields)
+            if (f["field_name"] != null) f["field_name"]: f["value"]
+        };
+
+        selectedCustomer = customer;
       });
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Customer not found")),
+        const SnackBar(content: Text("Failed to load customer details")),
       );
-    } finally {
-      setState(() => isLoading = false);
     }
+
+    setState(() => isLoading = false);
   }
 
   Future<void> submitUpdate() async {
     if (!_formKey.currentState!.validate()) return;
-    final id = int.tryParse(_idController.text.trim());
+    final id = selectedCustomerId;
     if (id == null) return;
 
     setState(() => isSubmitting = true);
 
     final updatePayload = {
-      "name": _nameController.text.trim(),
+      "first_name": _firstNameController.text.trim(),
+      "last_name": _lastNameController.text.trim(),
       "email": _emailController.text.trim(),
       "contact_number": _phoneController.text.trim(),
       "company_name": _companyController.text.trim(),
@@ -74,14 +110,12 @@ class _UpdateContactScreenState extends State<UpdateContactScreen> {
     try {
       final success = await UserApiService.updateCustomer(id, updatePayload);
 
-      // Save custom fields if any
       if (success && customFields.isNotEmpty) {
         final values = customFields.map((field) {
           final fieldName = field["field_name"];
-          final fieldId = field["id"];
           return {
             "customer_id": id,
-            "field_id": fieldId,
+            "field_id": field["id"],
             "value": customFieldValues[fieldName] ?? "",
           };
         }).toList();
@@ -91,13 +125,14 @@ class _UpdateContactScreenState extends State<UpdateContactScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Customer updated")),
       );
-    } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Update failed")),
-      );
-    } finally {
-      setState(() => isSubmitting = false);
-    }
+    } catch (e) {
+  print("Update failed: $e");
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text("Update failed: $e")),
+  );
+}
+
+    setState(() => isSubmitting = false);
   }
 
   @override
@@ -111,35 +146,52 @@ class _UpdateContactScreenState extends State<UpdateContactScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _idController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Enter Customer ID",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: loadCustomer,
-                  child: const Text("Load"),
-                ),
+            DropdownButtonFormField<int>(
+              value: selectedSalesmanId,
+              decoration: const InputDecoration(labelText: "Filter by Salesman"),
+              items: [
+                const DropdownMenuItem<int>(value: null, child: Text("All Salesmen")),
+                ...salesmen.map<DropdownMenuItem<int>>((s) => DropdownMenuItem<int>(
+                      value: s["id"] as int,
+                      child: Text(s["full_name"]),
+                    )),
               ],
+              onChanged: (val) {
+                setState(() => selectedSalesmanId = val);
+                fetchCustomers();
+              },
+            ),
+            const SizedBox(height: 16),
+
+            DropdownButtonFormField<int>(
+              value: selectedCustomerId,
+              decoration: const InputDecoration(labelText: "Select Customer"),
+              items: customers.map<DropdownMenuItem<int>>((c) {
+                return DropdownMenuItem<int>(
+                  value: c["id"] as int,
+                  child: Text("${c["first_name"]} ${c["last_name"]} (${c["email"]})"),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => selectedCustomerId = val);
+                  loadCustomerDetails(val);
+                }
+              },
             ),
             const SizedBox(height: 24),
+
             if (isLoading)
               const CircularProgressIndicator()
-            else if (customerLoaded)
+            else if (selectedCustomer.isNotEmpty)
               Expanded(
                 child: Form(
                   key: _formKey,
                   child: ListView(
                     children: [
-                      _buildField("Name", _nameController, TextInputType.name),
+                      _buildField("First Name", _firstNameController, TextInputType.name),
+                      const SizedBox(height: 16),
+                      _buildField("Last Name", _lastNameController, TextInputType.name),
                       const SizedBox(height: 16),
                       _buildField("Email", _emailController, TextInputType.emailAddress, isEmail: true),
                       const SizedBox(height: 16),
