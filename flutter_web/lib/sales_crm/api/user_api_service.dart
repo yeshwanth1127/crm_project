@@ -762,5 +762,26 @@ static Future<Map<String, dynamic>> fetchSalesmanOverview(int salesmanId) async 
       throw Exception('Error fetching salesman overview: $e');
     }
   }
+  static Future<List<dynamic>> fetchAssignedCustomers(int salesmanId) async {
+  final response = await http.get(Uri.parse('$baseUrl/customers/assigned/$salesmanId'));
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  } else {
+    throw Exception('Failed to load assigned customers');
+  }
+}
+static Future<List<dynamic>> fetchPendingTasks(int salesmanId) async {
+  final response = await http.get(
+    Uri.parse('$baseUrl/tasks/assigned/$salesmanId'),
+  );
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  } else {
+    throw Exception('Failed to fetch tasks');
+  }
+}
+
 }
 

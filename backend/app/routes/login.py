@@ -2,6 +2,7 @@ from backend.app.schemas import LoginResponse
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from passlib.exc import UnknownHashError
 from jose import jwt
 import os
 
@@ -17,7 +18,6 @@ if not SECRET_KEY or not SECRET_KEY.strip():
 router = APIRouter(prefix="/api", tags=["login"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
 @router.post("/login", response_model=LoginResponse)
 def login(
     email: str = Form(...),
@@ -28,9 +28,17 @@ def login(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if not pwd_context.verify(password, user.password):
+    # 🔐 Password verification with fallback
+    try:
+        password_matches = pwd_context.verify(password, user.password)
+    except UnknownHashError:
+        # Fallback: try plain text comparison
+        password_matches = (password == user.password)
+
+    if not password_matches:
         raise HTTPException(status_code=401, detail="Incorrect password")
 
+    # ✅ Fetch company info
     company = db.query(Company).filter(Company.id == user.company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -41,15 +49,15 @@ def login(
         "company_id": user.company_id
     }
 
-    print(f"✅ Login success for {email}, generating JWT")
-
     token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
 
     return {
-        "message": "Login successful",
-        "token": token,
-        "role": user.role,
-        "company_id": user.company_id,
-        "crm_type": company.crm_type,
-        "email": user.email
-    }
+    "message": "Login successful",
+    "token": token,
+    "role": user.role,
+    "user_id": user.id,  # ✅ ADD THIS LINE
+    "company_id": user.company_id,
+    "crm_type": company.crm_type,
+    "email": user.email
+}
+

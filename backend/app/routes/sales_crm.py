@@ -1145,3 +1145,28 @@ def get_salesman_overview(salesman_id: int, db: Session = Depends(get_db)):
         "pending_tasks": pending_tasks,
         "recent_interactions": recent_interactions
     }
+
+@router.get("/customers/assigned/{salesman_id}")
+def get_assigned_customers(salesman_id: int, db: Session = Depends(get_db)):
+    customers = db.query(Customer).filter(Customer.assigned_to == salesman_id).all()
+    return customers
+
+@router.get("/tasks/assigned/{salesman_id}")
+def get_pending_tasks_for_salesman(salesman_id: int, db: Session = Depends(get_db)):
+    tasks = db.query(TaskAssignment).filter(
+        TaskAssignment.assigned_to == salesman_id,
+        TaskAssignment.status == "assigned"
+    ).all()
+
+    result = []
+    for task in tasks:
+        result.append({
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "priority": task.priority,
+            "customer_id": task.customer_id,
+        })
+
+    return result

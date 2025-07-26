@@ -23,9 +23,11 @@ class LoginResponse(BaseModel):
     message: str
     token: str
     role: str
+    user_id: int  # ✅ Add this line
     company_id: int
     crm_type: str
     email: str
+
 
 class UserCreateSchema(BaseModel):
     full_name: constr(min_length=2, max_length=100)
