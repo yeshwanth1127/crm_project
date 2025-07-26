@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 from sqlalchemy import func, Enum
 from ..utils.audit_logger import log_audit, serialize_model
 from ..auth import get_current_user
-from ..models import CustomerCustomField, CustomerCustomValue
+from ..models import CustomerCustomField, CustomerCustomValue, TaskAssignment
 from ..schemas import CustomFieldCreateSchema, CustomFieldSchema, CustomValueCreateSchema, CustomerCustomValueInput, CustomerUpdate
 from ..database import get_db
 from ..models import Company, Customer, Interaction, Task, FollowUp, User, AuditLog
@@ -1100,4 +1100,48 @@ def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depend
             "due_today": followups_due_today,
             "upcoming": upcoming_followups
         }
+    }
+
+@router.get("/salesman/overview/{salesman_id}")
+def get_salesman_overview(salesman_id: int, db: Session = Depends(get_db)):
+    # ❌ No authentication, just fetch directly
+
+    # 🔍 Validate that the user exists and is a salesman
+    salesman = db.query(User).filter(User.id == salesman_id, User.role == 'salesman').first()
+    if not salesman:
+        raise HTTPException(status_code=404, detail="Salesman not found")
+
+    # 📌 Total customers assigned to this salesman
+    total_customers = db.query(Customer).filter(Customer.assigned_to == salesman_id).count()
+
+    # 📆 Upcoming followups within 3 days
+    now = datetime.utcnow()
+    in_3_days = now + timedelta(days=3)
+
+    upcoming_followups = db.query(FollowUp)\
+        .join(Customer, FollowUp.customer_id == Customer.id)\
+        .filter(
+            Customer.assigned_to == salesman_id,
+            FollowUp.followup_date >= now,
+            FollowUp.followup_date <= in_3_days
+        ).count()
+
+    # ⏳ Pending tasks
+    pending_tasks = db.query(TaskAssignment).filter(
+        TaskAssignment.assigned_to == salesman_id,
+        TaskAssignment.status == 'assigned'
+    ).count()
+
+    # 🔁 Recent interactions (last 7 days)
+    last_7_days = now - timedelta(days=7)
+    recent_interactions = db.query(Interaction).filter(
+        Interaction.user_id == salesman_id,
+        Interaction.timestamp >= last_7_days
+    ).count()
+
+    return {
+        "total_customers": total_customers,
+        "upcoming_followups": upcoming_followups,
+        "pending_tasks": pending_tasks,
+        "recent_interactions": recent_interactions
     }

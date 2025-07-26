@@ -747,5 +747,20 @@ static Future<Map<String, dynamic>> getTeamLeaderOverview(int teamLeaderId, Stri
     throw Exception('Failed to load dashboard data');
   }
 }
+static Future<Map<String, dynamic>> fetchSalesmanOverview(int salesmanId) async {
+    final url = Uri.parse('$baseUrl/salesman/overview/$salesmanId');
 
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to load overview: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching salesman overview: $e');
+    }
+  }
 }
+
