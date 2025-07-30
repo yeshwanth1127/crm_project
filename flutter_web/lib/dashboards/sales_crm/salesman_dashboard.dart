@@ -1,4 +1,4 @@
-// ignore_for_file: use_super_parameters
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter_web/sales_crm/salesman/completed_tasks_page.dart';
@@ -77,7 +77,7 @@ class _SalesmanDashboardState extends State<SalesmanDashboard> {
         ),
         child: Row(
           children: [
-            // Left Sidebar
+
             Container(
               width: 280,
               decoration: BoxDecoration(
@@ -94,12 +94,12 @@ class _SalesmanDashboardState extends State<SalesmanDashboard> {
               child: Column(
                 children: [
                   SizedBox(height: 40),
-                  // Profile Header
+
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       onTap: () {
-                        // Potential profile click action
+
                       },
                       child: Column(
                         children: [
@@ -153,7 +153,7 @@ class _SalesmanDashboardState extends State<SalesmanDashboard> {
                   ),
                   SizedBox(height: 30),
 
-                  // Navigation Menu
+
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -174,7 +174,7 @@ class _SalesmanDashboardState extends State<SalesmanDashboard> {
                     ),
                   ),
 
-                  // Logout Button
+
                   Padding(
                     padding: EdgeInsets.all(16.0),
                     child: MouseRegion(
@@ -233,7 +233,7 @@ class _SalesmanDashboardState extends State<SalesmanDashboard> {
               ),
             ),
 
-            // Main Content Area
+
             Expanded(
               child: Container(
                 decoration: BoxDecoration(

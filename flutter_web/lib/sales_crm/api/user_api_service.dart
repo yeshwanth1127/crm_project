@@ -44,17 +44,21 @@ class UserApiService {
 
   // ✅ Create User
   static Future<dynamic> createUser(Map<String, dynamic> userData) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/create-user'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(userData),
-    );
-    if (response.statusCode == 201) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to create user: ${response.body}');
-    }
+  final response = await http.post(
+    Uri.parse('$baseUrl/create-user'),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode(userData),
+  );
+
+  if (response.statusCode == 201) {
+    return jsonDecode(response.body);
+  } else {
+    throw Exception('Failed to create user: ${response.body}');
   }
+}
+
 
   // ✅ Delete User
   static Future<bool> deleteUser(int userId) async {

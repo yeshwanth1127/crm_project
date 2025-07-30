@@ -20,7 +20,7 @@ from backend.app import models
 
 router = APIRouter(prefix="/api/sales", tags=["Sales CRM Admin"])
 
-# ============================== ✅ CUSTOMERS ==============================
+
 
 @router.post("/customers/")
 def create_customer(
@@ -32,14 +32,14 @@ def create_customer(
     lead_status: Optional[str] = Form(None),
     assigned_to: int = Form(...),
     company_id: int = Form(...),
-    custom_values: Optional[str] = Form(None),  # JSON string from frontend
+    custom_values: Optional[str] = Form(None),  
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    # ✅ Safely extract company name from admin
+    
     company_name = user.company.company_name if user.company else "Unknown"
 
-    # ✅ Create the main customer record
+    
     customer = Customer(
         first_name=first_name,
         last_name=last_name,
@@ -56,7 +56,7 @@ def create_customer(
     db.commit()
     db.refresh(customer)
 
-    # ✅ Handle optional custom fields
+    
     if custom_values:
         try:
             parsed_values = json.loads(custom_values)
@@ -71,11 +71,11 @@ def create_customer(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid custom_values: {str(e)}")
 
-    # ✅ Audit log
+    
     log_audit(
     db, user.id, user.company_id, user.role,
     "Created Customer", "customer", customer.id,
-    None, customer  # ✅ Pass model directly; handled by log_audit
+    None, customer  
 )
 
 
@@ -87,7 +87,7 @@ def get_customer_status_summary(company_id: int, db: Session = Depends(get_db)):
                       .filter(Customer.company_id == company_id)\
                       .group_by(Customer.account_status).all()
     return {status: count for status, count in status_counts}
-# 
+
 @router.get("/customers/filter-by-status")
 def filter_customers_by_status(company_id: int, status: str, db: Session = Depends(get_db)):
     return db.query(Customer)\
@@ -99,7 +99,7 @@ def list_customers(company_id: int, db: Session = Depends(get_db)):
     result = []
 
     for customer in customers:
-        # Fetch custom field values for each customer
+        
         custom_values = db.query(CustomerCustomValue, CustomerCustomField)\
             .join(CustomerCustomField, CustomerCustomValue.field_id == CustomerCustomField.id)\
             .filter(CustomerCustomValue.customer_id == customer.id).all()
@@ -121,7 +121,7 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Fetch custom field values
+    
     custom_values = db.query(CustomerCustomValue, CustomerCustomField)\
         .join(CustomerCustomField, CustomerCustomValue.field_id == CustomerCustomField.id)\
         .filter(CustomerCustomValue.customer_id == customer_id).all()
@@ -151,7 +151,7 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
 @router.put("/customers/{customer_id}")
 def update_customer(
     customer_id: int,
-    data: CustomerUpdate,  # ✅ JSON body handled here
+    data: CustomerUpdate,  
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -161,7 +161,7 @@ def update_customer(
 
     before = serialize_model(customer)
 
-    update_data = data.dict(exclude_unset=True)  # ✅ Only send provided fields
+    update_data = data.dict(exclude_unset=True)  
     for field, value in update_data.items():
         setattr(customer, field, value)
 
@@ -195,7 +195,7 @@ def delete_customer(
 
 
 
-# ============================== ✅ TASKS ==============================
+
 
 @router.post("/tasks/")
 def create_task(
@@ -232,7 +232,7 @@ def get_tasks(db: Session = Depends(get_db)):
     return db.query(Task).all()
 
 
-# ============================== ✅ FOLLOWUPS ==============================
+
 
 @router.post("/followups/")
 def create_followup(
@@ -266,7 +266,7 @@ def get_followups(db: Session = Depends(get_db)):
     return db.query(FollowUp).all()
 
 
-# ============================== ✅ PIPELINE ANALYTICS ==============================
+
 
 @router.get("/pipeline-counts/")
 def get_pipeline_counts(company_id: int, db: Session = Depends(get_db)):
@@ -342,13 +342,12 @@ def update_features(company_id: int, updated_features: List[str], db: Session = 
     return {"message": "Features updated successfully"}
 
 
-# =========================== ✅ USER MANAGEMENT ROUTES ===========================
+
 
 @router.post("/create-user", status_code=status.HTTP_201_CREATED)
 def create_user(
     user_data: UserCreateSchema, 
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
@@ -367,10 +366,8 @@ def create_user(
     db.commit()
     db.refresh(new_user)
 
-    log_audit(db, user.id, user.company_id, user.role, "Created User", 
-              "user", new_user.id, None, new_user.__dict__)
-
     return new_user
+
 
 
 @router.get("/list-users", response_model=List[UserResponseSchema])
@@ -402,7 +399,7 @@ def delete_user(
 
 
 
-# =========================== ✅ COMPANY SETTINGS (OPTIONAL) ===========================
+
 
 @router.get("/company-settings")
 def get_company_settings(company_id: int, db: Session = Depends(get_db)):
@@ -441,7 +438,6 @@ def change_user_role(
     user_id: int, 
     new_role: str = Form(...),
     db: Session = Depends(get_db),
-    user = Depends(get_current_user)
 ):
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
@@ -451,8 +447,6 @@ def change_user_role(
     u.role = new_role
     db.commit()
 
-    log_audit(db, user.id, user.company_id, user.role, "Changed Role", 
-              "user", user_id, before, {"role": u.role})
 
     return {"message": "Role updated"}
 
@@ -510,7 +504,7 @@ def get_customers_of_salesman(salesman_id: int, db: Session = Depends(get_db)):
 
 @router.get("/get-hierarchy")
 def get_hierarchy(company_id: int, db: Session = Depends(get_db)):
-    # ✅ Step 1: Fetch all team leaders for this company
+    
     team_leaders = db.query(User).filter(
         User.company_id == company_id,
         User.role == 'team_leader'
@@ -519,7 +513,7 @@ def get_hierarchy(company_id: int, db: Session = Depends(get_db)):
     result = []
 
     for leader in team_leaders:
-        # ✅ Step 2: Fetch salesmen under this team leader
+        
         salesmen = db.query(User).filter(
             User.company_id == company_id,
             User.role == 'salesman',
@@ -529,7 +523,7 @@ def get_hierarchy(company_id: int, db: Session = Depends(get_db)):
         salesmen_data = []
 
         for salesman in salesmen:
-            # ✅ Step 3: Fetch customers assigned to this salesman
+            
             customers = db.query(Customer).filter(
                 Customer.assigned_to == salesman.id
             ).all()
@@ -653,7 +647,7 @@ def get_audit_logs(
     logs = query.order_by(models.AuditLog.timestamp.desc()).all()
     return logs
 
-# POST log (Internal Only)
+
 @router.post("/log")
 def create_audit_log(log: schemas.AuditLogCreate, user_id: int, company_id: int, role: str, db: Session = Depends(get_db)):
     new_log = models.AuditLog(
@@ -673,7 +667,7 @@ def create_audit_log(log: schemas.AuditLogCreate, user_id: int, company_id: int,
     db.refresh(new_log)
     return {"message": "Audit log created successfully"}
 
-# ➕ Create a new custom field
+
 @router.post("/custom-fields/", response_model=CustomFieldSchema)
 def create_custom_field(field: CustomFieldCreateSchema, db: Session = Depends(get_db), user = Depends(get_current_user)):
     new_field = CustomerCustomField(**field.dict())
@@ -682,7 +676,7 @@ def create_custom_field(field: CustomFieldCreateSchema, db: Session = Depends(ge
     db.refresh(new_field)
     return new_field
 
-# 📥 Get all custom fields for a company
+
 @router.get("/custom-fields/")
 def get_custom_fields(company_id: int, db: Session = Depends(get_db)):
     fields = db.query(CustomerCustomField).filter(CustomerCustomField.company_id == company_id).all()
@@ -696,7 +690,7 @@ def get_custom_fields(company_id: int, db: Session = Depends(get_db)):
         for field in fields
     ]
 
-# 💾 Save custom values for a specific customer
+
 @router.post("/custom-values/")
 def save_custom_values(
     data: List[CustomValueCreateSchema],
@@ -715,7 +709,7 @@ def save_custom_values(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error saving custom values: {str(e)}")
-# 📤 Get all custom values for a specific customer
+
 
 @router.get("/custom-values/{customer_id}")
 def get_custom_values(customer_id: int, db: Session = Depends(get_db)):
@@ -886,7 +880,7 @@ def assign_task(
         task_type_id=task_data.task_type_id,
         assigned_by=task_data.assigned_by,
         assigned_to=task_data.assigned_to,
-        customer_id=task_data.customer_id,  # ✅ Include customer_id here
+        customer_id=task_data.customer_id,  
         title=task_data.title,
         description=task_data.description,
         due_date=task_data.due_date,
@@ -947,11 +941,10 @@ def mark_task_complete(
     task.completed_at = datetime.utcnow()
     db.commit()
 
-    # Log using the assigned_by as a placeholder since there's no auth user
     log = models.TaskLog(
         task_id=task.id,
         action="completed",
-        performed_by=task.assigned_by  # Using assigned_by user ID
+        performed_by=task.assigned_by  
     )
     db.add(log)
     db.commit()
@@ -1012,7 +1005,7 @@ def initialize_task_types(db: Session = Depends(get_db)):
 
 @router.get("/team-leader/{team_leader_id}/overview")
 def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depends(get_db)):
-    # Step 1: Get all salesmen under this team leader
+    
     salesmen = db.query(User).filter(
         User.assigned_team_leader == team_leader_id,
         User.role == 'salesman'
@@ -1028,16 +1021,16 @@ def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depend
             "followups": {"due_today": 0, "upcoming": 0}
         }
 
-    # Step 2: Get all customers assigned to those salesmen
+    
     customers = db.query(Customer).filter(Customer.assigned_to.in_(salesmen_ids)).all()
 
-    # Step 3: Pipeline stage grouping
+    
     pipeline_counts = {}
     for customer in customers:
         stage = customer.pipeline_stage or "Unspecified"
         pipeline_counts[stage] = pipeline_counts.get(stage, 0) + 1
 
-    # Step 4: Task summary
+    
     assigned_tasks = db.query(models.TaskAssignment).filter(
         models.TaskAssignment.assigned_to.in_(salesmen_ids),
         models.TaskAssignment.status == "assigned"
@@ -1048,7 +1041,7 @@ def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depend
         models.TaskAssignment.status == "completed"
     ).count()
 
-    # Step 5: Follow-up summary
+    
     from datetime import datetime, timedelta
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1104,17 +1097,17 @@ def get_team_leader_dashboard_overview(team_leader_id: int, db: Session = Depend
 
 @router.get("/salesman/overview/{salesman_id}")
 def get_salesman_overview(salesman_id: int, db: Session = Depends(get_db)):
-    # ❌ No authentication, just fetch directly
+    
 
-    # 🔍 Validate that the user exists and is a salesman
+    
     salesman = db.query(User).filter(User.id == salesman_id, User.role == 'salesman').first()
     if not salesman:
         raise HTTPException(status_code=404, detail="Salesman not found")
 
-    # 📌 Total customers assigned to this salesman
+    
     total_customers = db.query(Customer).filter(Customer.assigned_to == salesman_id).count()
 
-    # 📆 Upcoming followups within 3 days
+    
     now = datetime.utcnow()
     in_3_days = now + timedelta(days=3)
 
@@ -1126,13 +1119,13 @@ def get_salesman_overview(salesman_id: int, db: Session = Depends(get_db)):
             FollowUp.followup_date <= in_3_days
         ).count()
 
-    # ⏳ Pending tasks
+    
     pending_tasks = db.query(TaskAssignment).filter(
         TaskAssignment.assigned_to == salesman_id,
         TaskAssignment.status == 'assigned'
     ).count()
 
-    # 🔁 Recent interactions (last 7 days)
+    
     last_7_days = now - timedelta(days=7)
     recent_interactions = db.query(Interaction).filter(
         Interaction.user_id == salesman_id,

@@ -543,7 +543,7 @@ Widget _buildAuditLogTile(dynamic log) {
     isEmployeeLoading = true;
   });
 
-  // Fetch both roles
+
   final salesmen = await UserApiService.getEmployeesByRoleAndStatus(companyId!, 'salesman', status: status!);
   final teamLeaders = await UserApiService.getEmployeesByRoleAndStatus(companyId!, 'team_leader', status: status);
 
@@ -753,85 +753,174 @@ Widget _buildAuditLogTile(dynamic log) {
   }
 
   Widget _buildAddUserPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Add New User', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Full Name', fillColor: Colors.white, filled: true),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _emailController,
-            decoration: const InputDecoration(labelText: 'Email', fillColor: Colors.white, filled: true),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _phoneController,
-            decoration: const InputDecoration(labelText: 'Phone', fillColor: Colors.white, filled: true),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _passwordController,
-            decoration: const InputDecoration(labelText: 'Password', fillColor: Colors.white, filled: true),
-            obscureText: true,
-          ),
-          const SizedBox(height: 10),
-          DropdownButton<String>(
-            value: selectedRole,
-            hint: const Text('Select Role', style: TextStyle(color: Colors.white)),
-            items: ['admin', 'team_leader', 'salesman'].map((role) {
-              return DropdownMenuItem<String>(
-                value: role,
-                child: Text(role, style: const TextStyle(color: Colors.black)),
-              );
-            }).toList(),
-            onChanged: (value) => setState(() => selectedRole = value!),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () async {
-              if (_nameController.text.isEmpty ||
-                  _emailController.text.isEmpty ||
-                  _phoneController.text.isEmpty ||
-                  _passwordController.text.isEmpty ||
-                  selectedRole == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please fill all fields and select a role')));
-                return;
-              }
+  return Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Container(
+        width: MediaQuery.of(context).size.width > 600 ? 550 : double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 24,
+              spreadRadius: 2,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add New User',
+              style: TextStyle(
+                color: Colors.blueGrey,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Fill in the details to create a new user account',
+              style: TextStyle(
+                color: Colors.blueGrey,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildTextField(_nameController, 'Full Name', Icons.person),
+            const SizedBox(height: 16),
+            _buildTextField(_emailController, 'Email', Icons.email),
+            const SizedBox(height: 16),
+            _buildTextField(_phoneController, 'Phone', Icons.phone),
+            const SizedBox(height: 16),
+            _buildTextField(_passwordController, 'Password', Icons.lock, isPassword: true),
+            const SizedBox(height: 16),
+            _buildRoleDropdown(),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 2,
+                ),
+                onPressed: () async {
+                  if (_nameController.text.isEmpty ||
+                      _emailController.text.isEmpty ||
+                      _phoneController.text.isEmpty ||
+                      _passwordController.text.isEmpty ||
+                      selectedRole == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please fill all fields and select a role'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
 
-              await createUser(
-                fullName: _nameController.text,
-                email: _emailController.text,
-                phone: _phoneController.text,
-                password: _passwordController.text,
-                role: selectedRole!,
-                companyId: companyId!,
-              );
+                  await createUser(
+                    fullName: _nameController.text,
+                    email: _emailController.text,
+                    phone: _phoneController.text,
+                    password: _passwordController.text,
+                    role: selectedRole!,
+                    companyId: companyId!,
+                  );
 
-              _nameController.clear();
-              _emailController.clear();
-              _phoneController.clear();
-              _passwordController.clear();
+                  _nameController.clear();
+                  _emailController.clear();
+                  _phoneController.clear();
+                  _passwordController.clear();
 
-              setState(() {
-                selectedRole = null;
-              });
+                  setState(() {
+                    selectedRole = null;
+                  });
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('User Created Successfully')));
-            },
-            child: const Text('Create User'),
-          ),
-        ],
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('User Created Successfully'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+                child: const Text(
+                  'CREATE USER',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isPassword = false}) {
+  return TextField(
+    controller: controller,
+    obscureText: isPassword,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: Colors.blueGrey),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.grey),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.blueAccent),
+      ),
+      filled: true,
+      fillColor: Colors.grey[50],
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+    ),
+  );
+}
+
+Widget _buildRoleDropdown() {
+  return Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.grey),
+      color: Colors.grey[50],
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        isExpanded: true,
+        value: selectedRole,
+        hint: const Text('Select Role'),
+        icon: const Icon(Icons.arrow_drop_down, color: Colors.blueGrey),
+        style: const TextStyle(color: Colors.blueGrey, fontSize: 16),
+        items: ['admin', 'team_leader', 'salesman'].map((role) {
+          return DropdownMenuItem<String>(
+            value: role,
+            child: Text(
+              role.replaceAll('_', ' ').toUpperCase(),
+              style: const TextStyle(color: Colors.blueGrey),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) => setState(() => selectedRole = value!),
+      ),
+    ),
+  );
+}
 
   Widget _buildUserListPage() {
     if (isLoading) {
